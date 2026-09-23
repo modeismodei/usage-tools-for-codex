@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+import pathlib,sys
+sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
+from codex_limit_tools.cli import usage
+try:
+    usage()
+except KeyboardInterrupt:
+    print("Interrupted.",file=sys.stderr)
+    sys.exit(130)
+except Exception as e:
+    print("ERROR: "+str(e),file=sys.stderr)
+    sys.exit(1)

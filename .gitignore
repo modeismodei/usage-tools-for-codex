@@ -1,0 +1,48 @@
+### Private files
+
+.MODEI.md
+.MODEI-exhaustive.md
+.private/
+
+# Python generated files and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Secrets and machine-specific configuration
+.env
+.env.*
+!.env.example
+
+# Local runtime state, raw transcripts, and generated reports
+.runtime/
+.local-state/
+.codex/
+logs/
+exports/
+backups/
+*.log
+*.sqlite3
+*.sqlite3-*
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.jsonl
+*.backup-*
+/history.json
+/history.csv
+/estimates.json
+/estimates.csv
+/segments.csv
+/snapshots.csv
+/analysis.json
+
+# Generated distribution archives
+/dist/
+/build/
+/Codex-Limit-Tools*.zip

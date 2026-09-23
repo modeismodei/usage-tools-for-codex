@@ -1,0 +1,130 @@
+{
+  "schema": 1,
+  "name": "standard-reference-2026-09-23",
+  "notice": "GPT-6 Astra/Sol/Luna standard prices verified against official docs on 2026-09-23. Other entries retained from user-supplied 2026-09-11 snapshot; verify before treating as current. All are reference-equivalent rates, not subscription billing.",
+  "long_context_threshold": 272000,
+  "long_input_multiplier": 2,
+  "long_output_multiplier": 1.5,
+  "aliases": {
+    "gpt-6": "gpt-6-astra",
+    "gpt-5.6": "gpt-5.6-sol"
+  },
+  "models": {
+    "gpt-6-astra": {
+      "input": 10.0,
+      "cached": 1.0,
+      "output": 50.0,
+      "cache_write": 12.5,
+      "long_context": true
+    },
+    "gpt-5.6-sol": {
+      "input": 4.0,
+      "cached": 0.4,
+      "output": 20.0,
+      "cache_write": 5.0,
+      "long_context": true
+    },
+    "gpt-5.6-terra": {
+      "input": 2.0,
+      "cached": 0.2,
+      "output": 12.0,
+      "cache_write": 2.5,
+      "long_context": true
+    },
+    "gpt-5.6-luna": {
+      "input": 0.2,
+      "cached": 0.02,
+      "output": 1.2,
+      "cache_write": 0.25,
+      "long_context": true
+    },
+    "gpt-5.5": {
+      "input": 5.0,
+      "cached": 0.5,
+      "output": 30.0,
+      "cache_write": null,
+      "long_context": true
+    },
+    "gpt-5.4": {
+      "input": 2.5,
+      "cached": 0.25,
+      "output": 15.0,
+      "cache_write": null,
+      "long_context": false
+    },
+    "gpt-5.4-mini": {
+      "input": 0.75,
+      "cached": 0.075,
+      "output": 4.5,
+      "cache_write": null,
+      "long_context": false
+    },
+    "gpt-5.4-nano": {
+      "input": 0.2,
+      "cached": 0.02,
+      "output": 1.25,
+      "cache_write": null,
+      "long_context": false
+    },
+    "gpt-5.3-codex": {
+      "input": 1.75,
+      "cached": 0.175,
+      "output": 14.0,
+      "cache_write": null,
+      "long_context": false
+    },
+    "gpt-5.3": {
+      "input": 1.75,
+      "cached": 0.175,
+      "output": 14.0,
+      "cache_write": null,
+      "long_context": false
+    },
+    "gpt-5.2-codex": {
+      "input": 1.75,
+      "cached": 0.175,
+      "output": 14.0,
+      "cache_write": null,
+      "long_context": false
+    },
+    "gpt-5.2": {
+      "input": 1.75,
+      "cached": 0.175,
+      "output": 14.0,
+      "cache_write": null,
+      "long_context": false
+    },
+    "gpt-5-codex": {
+      "input": 1.25,
+      "cached": 0.125,
+      "output": 10.0,
+      "cache_write": null,
+      "long_context": false
+    },
+    "gpt-5": {
+      "input": 1.25,
+      "cached": 0.125,
+      "output": 10.0,
+      "cache_write": null,
+      "long_context": false
+    },
+    "gpt-6-sol": {
+      "input": 2,
+      "cached": 0.2,
+      "output": 10,
+      "cache_write": 2.5,
+      "long_context": true
+    },
+    "gpt-6-luna": {
+      "input": 0.1,
+      "cached": 0.01,
+      "output": 0.5,
+      "cache_write": 0.125,
+      "long_context": true
+    }
+  },
+  "sources": [
+    "https://developers.openai.com/api/docs/pricing",
+    "https://developers.openai.com/api/docs/models/gpt-6-sol"
+  ]
+}
