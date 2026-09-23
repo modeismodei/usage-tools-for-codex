@@ -49,10 +49,10 @@ Compatible segments may describe more than 100 percentage points of observed con
 
 **Dependencies:** none. **Primary files:** `estimate.py`, tests, documentation.
 
-- [ ] Define a normalized analysis interval containing source segment/run IDs, endpoint snapshot IDs and times, quota remaining at each endpoint, metric deltas, compatibility keys, and inclusion/exclusion status.
-- [ ] Define stable JSON fields for aggregate estimates, endpoint selection, compatibility groups, quality indicators, and excluded intervals.
-- [ ] Keep existing JSON fields and the existing default daily CSV format compatible where possible; add an explicit export schema version.
-- [ ] Create small deterministic fixtures for a 73% to 40% interval, uneven segment sizes, a reset, a pause, a UTC midnight crossing, and incomplete pricing.
+- [x] Define a normalized analysis interval containing source segment/run IDs, endpoint snapshot IDs and times, quota remaining at each endpoint, metric deltas, compatibility keys, and inclusion/exclusion status.
+- [x] Define stable JSON fields for aggregate estimates, endpoint selection, compatibility groups, quality indicators, and excluded intervals.
+- [x] Keep existing JSON fields and the existing default daily CSV format compatible where possible; add an explicit export schema version.
+- [x] Create small deterministic fixtures for a 73% to 40% interval, uneven segment sizes, a reset, a pause, a UTC midnight crossing, and incomplete pricing.
 
 **Acceptance:** fixtures state expected totals independently of implementation; the 33-point/$132 case gives $400, and unequal-sized segments demonstrate ratio-of-sums behavior.
 
