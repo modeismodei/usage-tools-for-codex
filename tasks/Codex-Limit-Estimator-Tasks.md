@@ -192,16 +192,16 @@ codex-limit-estimator checkpoint --wait
 
 **Dependencies:** T02–T09. **Primary files:** tests, `README.md`, installation documentation.
 
-- [ ] Run focused tests after each coherent logic change; run the complete suite once before delivery and again only if a relevant failure requires it.
-- [ ] Cover ratio-of-sums, zero-change intervals, filtering/deduplication, midnight continuity, reset exclusion, migration, read consistency, price partitioning, quota range selection, and checkpoint acknowledgement.
-- [ ] Reuse the fake read-only RPC harness. Never consume real model quota for tests.
-- [ ] Include CLI JSON/export smoke tests and a small pseudo-terminal test for unchanged TUI controls.
-- [ ] Provide an English command reference and worked examples for current segment, full run, multiple days, selected segments, 73% to 40%, and offline history analysis.
-- [ ] Explain which commands are new, which require new data, and what legacy observations can and cannot recover.
-- [ ] Document an upgrade sequence: checkpoint if appropriate, shutdown, confirm daemon exit, SQLite backup, preserve the old installation, install updated package, migrate safely, resume, verify history.
-- [ ] Preserve the user's external prices JSON and independent quota watcher. Do not delete old history or backups automatically.
-- [ ] Store detailed test logs locally; report aggregate pass/fail results and inspect failure details only when needed. Do not repeatedly read long successful test output.
-- [ ] If working in a Git repository, make logical intermediate commits containing only task-related changes. Do not push without explicit authorization.
+- [x] Run focused tests after each coherent logic change; run the complete suite once before delivery and again only if a relevant failure requires it.
+- [x] Cover ratio-of-sums, zero-change intervals, filtering/deduplication, midnight continuity, reset exclusion, migration, read consistency, price partitioning, quota range selection, and checkpoint acknowledgement.
+- [x] Reuse the fake read-only RPC harness. Never consume real model quota for tests.
+- [x] Include CLI JSON/export smoke tests and a small pseudo-terminal test for unchanged TUI controls.
+- [x] Provide an English command reference and worked examples for current segment, full run, multiple days, selected segments, 73% to 40%, and offline history analysis.
+- [x] Explain which commands are new, which require new data, and what legacy observations can and cannot recover.
+- [x] Document an upgrade sequence: checkpoint if appropriate, shutdown, confirm daemon exit, SQLite backup, preserve the old installation, install updated package, migrate safely, resume, verify history.
+- [x] Preserve the user's external prices JSON and independent quota watcher. Do not delete old history or backups automatically.
+- [x] Store detailed test logs locally; report aggregate pass/fail results and inspect failure details only when needed. Do not repeatedly read long successful test output.
+- [x] If working in a Git repository, make logical intermediate commits containing only task-related changes. Do not push without explicit authorization.
 
 **Acceptance:** existing history survives a tested upgrade; old entry points remain usable; new commands have reproducible examples; final delivery states actual tests and any remaining live-environment limitations.
 

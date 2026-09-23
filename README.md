@@ -27,6 +27,11 @@ with matching names, and installs the shared package under
 `~/.local/lib/codex-limit-tools`. It installs an editable price file under
 `${XDG_CONFIG_HOME:-~/.config}/codex-limit-tools/prices.json` if none exists.
 It NEVER replaces or modifies `watch-codex-quota` or an existing quota state file.
+To update an existing package after shutting down its collector, use
+`bash install.sh --upgrade` (`--update` is an alias). It preserves the previous
+installation and external prices and backs up supplied state directories without
+starting collection or migrating them. Follow the [safe upgrade sequence](docs/UPGRADING.md).
+
 Make sure `~/.local/bin` is on PATH. If your shell cached the old command, open a
 new terminal or run `rehash` in Zsh / `hash -r` in Bash.
 
@@ -57,6 +62,8 @@ to the live estimate. An estimate requires actual quota consumption.
 | `s` | Stop/pause collecting; leave the background process available |
 | `r` | Resume a paused live daemon with a fresh baseline |
 | `h` | Toggle daily history |
+| `v` | Cycle segment, current run aggregate, and daily views |
+| `[` / `]` | Select separate compatibility groups in the run view |
 
 Reattach at any time:
 
@@ -83,6 +90,27 @@ may wait for an in-progress log scan/account request to finish; they do not kill
 other Codex processes. Reboot startup is not automatically installed.
 Starting an already-running tracker attaches without replacing its configuration.
 If it is paused, press `r` or run `resume`.
+
+## Offline history analysis
+
+New `runs`, `segments`, and `analyze` commands select saved observations without
+starting a collector or contacting Codex. Export raw snapshots or analysis with
+`export --view snapshots|segments|analysis`. `checkpoint --wait` requests a bounded
+immediate sample from an existing unpaused daemon; it returns an observed snapshot
+ID. Use paired `--snapshot-from`/`--snapshot-to` IDs for a reproducible selection.
+
+```bash
+codex-limit-estimator runs
+codex-limit-estimator segments --run RUN_ID
+codex-limit-estimator analyze --run RUN_ID --remaining-from 73 --remaining-to 40
+codex-limit-estimator analyze --run RUN_ID --group-by day --json
+```
+
+See the [command reference and worked examples](docs/COMMANDS.md),
+[analysis and export contract](docs/ANALYSIS.md), and
+[installation upgrade instructions](docs/UPGRADING.md). Default sampling remains
+five minutes. Results report observed quota points, coverage, exclusions and
+conditional rounding bounds; they do not establish an official allowance.
 
 ## Editable prices, including GPT-6 Sol
 
@@ -199,7 +227,7 @@ Estimates below five consumed points are marked provisional by default.
 The estimator continues tracking across resets; it does NOT stop an agent or
 apply a spending threshold. It starts a new segment on any quota replenishment,
 reset-deadline change, account/plan change, pause/resume, restart, collection gap,
-log read/parse problem, changed historical model attribution, or UTC date change.
+log read/parse problem, or changed historical model attribution.
 It excludes the interval crossing such a boundary rather than assigning its
 mixed consumption to one side. The first sample on each side is a baseline.
 A correction can look like a reset; the event is labeled descriptively.
@@ -209,9 +237,13 @@ Within a day and price/workload/account-meter group, daily results use the ratio
 cost differences to summed quota-point differences, not an average of ratios.
 Exports also include daily input, non-cached, cached, output and reasoning
 equivalents per 100%. Account/plan/bucket identities remain separate.
-Intervals with no measurable quota consumption are not estimated. When grouping
-multiple segments, the daily report does not fabricate a confidence interval.
-Cross-midnight boundary intervals are omitted; day labels use UTC, not local time.
+Intervals with zero quota movement retain their local deltas in broader aggregates;
+a zero-point daily row has a null estimate. New collection continues across midnight.
+Each adjacent interval belongs to the UTC day of its ending observation, with no
+interpolated midnight sample. Original midnight gaps remain excluded. Aggregated
+rounding bounds count distinct endpoints and cancel shared endpoints; disjoint
+segments generally have wider bounds than one continuous interval. They remain
+conditional rounding envelopes, not statistical confidence intervals.
 
 For the question "did it fall from $400 to $200 in a month?":
 
@@ -286,16 +318,24 @@ The bundle does not install a boot service or send analytics elsewhere.
 ## Tests and validation limits
 
 ```bash
+python3 tests/run_checks.py
+# Or focus on a coherent area:
+python3 tests/run_checks.py --pattern test_install.py
+# Direct standard-library entry point remains available:
 python3 -m unittest discover -s tests
 ```
 
-Fifteen offline tests cover deduplication/foreign copies, incremental and partial
-JSONL reads, token accounting, long context and Sol prices, unpriced models,
-invalid records, source isolation, ratio/rounding behavior, segmentation,
-price validation, read-only fake RPC, actual detached daemon lifecycle,
-stop/resume/shutdown and curses attachment/detachment through a pseudoterminal.
-The fake RPC rejects non-allowlisted methods. These tests do not access a real
-account, spend subscription quota, or establish live CLI compatibility.
+The summary runner prints only counts/status and the process exit code, retaining
+verbose details in ignored `logs/`. Read those details only to investigate failures.
+Tests cover arithmetic/rounding, token subsets, filters and deduplication, zero-change
+intervals, midnight continuity, exclusions, original/schema-1 migrations, backups
+and rollback, consistent reads, price partitions, observed quota ranges, checkpoint
+acknowledgement/errors, offline JSON/CSV commands, terminal controls and installer
+upgrades/rollback. Installation tests isolate prefix, config and state directories.
+The fake RPC harness rejects non-allowlisted methods and exercises actual detached
+processes. No tests access a real account, consume model quota, upgrade a permanent
+installation, or establish live Codex compatibility. Runtime has no third-party
+Python dependencies; this implementation was verified with Python 3.14.
 
 The preview image uses explicitly synthetic data to illustrate layout; it is
 not a measured result from the user's account.

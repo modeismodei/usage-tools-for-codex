@@ -1,4 +1,5 @@
 import copy
+import json
 import unittest
 from codex_limit_tools.estimate import analysis_interval, analyze_history, estimate, parse_time
 from analysis_fixtures import LARGE, UNEVEN, RESET, PAUSE, MIDNIGHT, PARTIAL, segment, snapshot
@@ -129,6 +130,15 @@ class Aggregation(unittest.TestCase):
         result = analyze_history(source)
         self.assertFalse(result['estimable'])
         self.assertIn('invalid counters', result['excluded_intervals'][0]['exclusion_reason'])
+
+    def test_invalid_numeric_metrics_are_explicit_and_json_safe(self):
+        for cost in (float('nan'), float('inf'), 'invalid'):
+            source = copy.deepcopy(history(LARGE))
+            source[0]['snapshots'][-1]['metrics']['cost'] = cost
+            result = analyze_history(source)
+            self.assertFalse(result['estimable'])
+            self.assertIsNone(result['excluded_intervals'][0]['delta']['cost'])
+            json.dumps(result, allow_nan=False)
 
     def test_timezone_and_date_selection(self):
         self.assertEqual(parse_time('1970-01-01'), 0)

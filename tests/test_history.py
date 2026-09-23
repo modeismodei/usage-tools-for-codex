@@ -115,6 +115,21 @@ class History(unittest.TestCase):
                 connect(self.path, readonly=readonly)
         self.assertFalse(list(self.path.glob('*.backup-*')))
 
+    def test_schema_one_upgrades_without_changing_run_snapshot(self):
+        db = legacy_database(self.path)
+        common._migration_v1(db)
+        configured = ensure_run(db, get(db, 'config'))
+        db.execute('PRAGMA user_version=1')
+        db.commit()
+        saved = [tuple(r) for r in db.execute('SELECT * FROM runs')]
+        db.close()
+        current = connect(self.path)
+        self.addCleanup(current.close)
+        self.assertEqual([tuple(r) for r in current.execute('SELECT * FROM runs')], saved)
+        self.assertEqual(get(current, 'config'), configured)
+        self.assertEqual(current.execute('SELECT count(*) FROM checkpoints').fetchone()[0], 0)
+        self.assertEqual(len(list(self.path.glob('*.backup-v1-*'))), 1)
+
     def test_consistent_read_during_writer_commit(self):
         writer = connect(self.path)
         self.addCleanup(writer.close)

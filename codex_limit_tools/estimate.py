@@ -12,11 +12,19 @@ def analysis_interval(segment, first, last):
     saved = segment.get('config', {})
     if isinstance(saved, str):
         saved = json.loads(saved)
-    delta = subtract(last['metrics'], first['metrics'])
+    def finite(value):
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    invalid_metrics = any(not finite(s['metrics'].get(k, 0)) or s['metrics'].get(k, 0) < 0
+                          for s in (first, last) for k in FIELDS)
+    try:
+        delta = subtract(last['metrics'], first['metrics'])
+    except (TypeError, AttributeError):
+        delta = {**dict.fromkeys(FIELDS), 'models': {}}
+        invalid_metrics = True
     points = last['used'] - first['used']
     reason = None
     values = [first['used'], last['used'], first['ts'], last['ts'], *delta.values()]
-    if any(not isinstance(v, (int, float)) or not math.isfinite(v)
+    if invalid_metrics or any(not finite(v)
            for v in values if not isinstance(v, dict)):
         reason = 'invalid counters'
     elif not (0 <= first['used'] <= 100 and 0 <= last['used'] <= 100):
@@ -40,7 +48,7 @@ def analysis_interval(segment, first, last):
     def endpoint(snapshot):
         return {'snapshot_id': snapshot['id'], 'ts': snapshot['ts'],
                 'used': snapshot['used'], 'remaining': 100 - snapshot['used']}
-    return {
+    result = {
         'interval_id': f"{segment['id']}:{first['id']}:{last['id']}",
         'source_segment_id': segment['id'], 'source_run_id': segment.get('run_id'),
         'start': endpoint(first), 'end': endpoint(last),
@@ -51,6 +59,12 @@ def analysis_interval(segment, first, last):
         'resolution': saved.get('resolution', 1), 'min_points': saved.get('min_points', 5),
         'included': reason is None, 'exclusion_reason': reason,
     }
+    # Invalid recorded metrics remain excluded and representable in strict JSON.
+    if reason:
+        result['delta'] = {k: v if finite(v) else None for k, v in delta.items() if k != 'models'}
+        result['delta']['models'] = {name: {k: v if finite(v) else None for k, v in mix.items()}
+                                     for name, mix in delta['models'].items()}
+    return result
 
 def estimate(first,last,resolution=1,min_points=5):
     dp=last['used']-first['used'];d=subtract(last['metrics'],first['metrics'])
