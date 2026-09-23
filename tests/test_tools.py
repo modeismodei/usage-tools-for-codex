@@ -144,7 +144,15 @@ for line in sys.stdin:
    ui=subprocess.Popen(cmd+['--data-dir',str(state)],stdin=slave,stdout=slave,stderr=slave,env=env)
    os.close(slave)
    try:
-    time.sleep(.3);os.write(master,b'q');ui.wait(timeout=5)
+    audit_before=pathlib.Path(str(fake)+'.audit').read_text()
+    time.sleep(.15);os.write(master,b'vvh[]v');time.sleep(.15)
+    self.assertEqual(pathlib.Path(str(fake)+'.audit').read_text(),audit_before)
+    run_before=get(live,'config')['run_id']
+    os.write(master,b's');wait_phase('paused')
+    os.write(master,b'r');wait_phase('tracking')
+    self.assertEqual(get(live,'config')['run_id'],run_before)
+    fcntl.ioctl(master,termios.TIOCSWINSZ,struct.pack('HHHH',8,30,0,0))
+    os.write(master,b'vq');ui.wait(timeout=5)
     self.assertEqual(ui.returncode,0);self.assertTrue(running(state))
    finally:
     if ui.poll() is None:ui.kill();ui.wait()

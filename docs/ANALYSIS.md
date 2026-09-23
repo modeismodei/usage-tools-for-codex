@@ -144,3 +144,12 @@ or adjusting a half-open time range. Resets/pauses between endpoints still leave
 excluded gaps and separate compatible intervals. A checkpoint cannot eliminate
 provider reporting lag. You may wait for observations to settle and record a
 later final checkpoint before pausing; immediate final accounting is not promised.
+
+## Terminal views
+
+Press `v` to cycle current segment, current run aggregate and daily history.
+`h` still toggles history; `[` and `]` select separate compatibility groups in
+the run view. The visible legend retains `q` detach, `s` pause and `r` resume.
+Views share the CLI analysis calculations and render stored data in a consistent
+read transaction. Navigation does not request quota or change the sampling timer.
+Narrow terminals keep controls available and display a compact status message.

@@ -181,10 +181,10 @@ codex-limit-estimator checkpoint --wait
 
 **Dependencies:** T05, T06. **Primary file:** `tui.py`.
 
-- [ ] Add a minimal switch between current-segment, current-run aggregate, and existing daily-history views, with a visible key legend.
-- [ ] Show observed quota points, equivalent dollars and token volumes per 100%, partial-pricing status, and conditional rounding bounds.
-- [ ] Render stored analysis results without causing extra quota RPCs or model activity.
-- [ ] Preserve existing detach/pause/resume behavior and handle small terminals gracefully.
+- [x] Add a minimal switch between current-segment, current-run aggregate, and existing daily-history views, with a visible key legend.
+- [x] Show observed quota points, equivalent dollars and token volumes per 100%, partial-pricing status, and conditional rounding bounds.
+- [x] Render stored analysis results without causing extra quota RPCs or model activity.
+- [x] Preserve existing detach/pause/resume behavior and handle small terminals gracefully.
 
 **Acceptance:** aggregate display matches CLI JSON for the same selection; navigating the TUI does not change tracking or sampling frequency.
 

@@ -1,10 +1,11 @@
 # Implementation checkpoint
 
 - T01: `888ac0a`; T02: `ff8c82c`; T03–T05: `102cebe`; T06–T07: `fa7fd4f`.
-- T08: bounded checkpoint requests with atomic snapshot acknowledgement.
-- Added inclusive snapshot-ID selectors for exact checkpoint measurements.
-- Full suite: 48 tests passed for this milestone working revision on Python 3.14.
-- Next: T09, compact current-run aggregate TUI with existing controls preserved.
-- Then T10: installer upgrade mode, temporary-prefix tests and final documentation.
+- T08: `f44c9c2`; T09: aggregate TUI and compatibility-group navigation.
+- Full suite at T08: 48 tests passed.
+- T09 working revision: 2 aggregate-render tests and 16 original/integration tests
+  passed, including PTY pause/resume/detach, narrow resize and no extra RPCs.
+- Next: T10, safe installer upgrade mode and temporary-prefix upgrade tests.
+- Final test output will be logged locally and reported as aggregate summaries.
 - No blockers or unrelated/uncommitted work at this checkpoint.
 - All verification is synthetic/offline; no live account verification.
