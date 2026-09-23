@@ -113,3 +113,34 @@ and encode nested fields as JSON cells. Snapshot exports retain cumulative
 metrics and segment compatibility/configuration so calculations are reproducible.
 A non-estimable analysis CSV contains a status row. Default daily CSV keeps its
 original header; default JSON keeps `segments`, `daily` and status fields.
+
+## Manual checkpoints
+
+SQLite schema 2 adds a checkpoint request/acknowledgement table, separate from
+pause/shutdown control state. `checkpoint --wait` asks the existing daemon for
+one immediate sample. It never starts or resumes a collector. The request UUID
+is acknowledged with the committed snapshot ID and observed endpoint. Requests
+expire after 90 seconds by default; `--timeout SECONDS` accepts (0,300]. Only one
+request may be pending. Failures, pause/shutdown and daemon restarts terminate
+requests without replay. Snapshot and success acknowledgement commit together.
+A timeout never retries; an already in-flight read may finish later. Inspect it
+with `checkpoint --request-id REQUEST_ID --json`. Without `--wait`, the command
+returns the pending request immediately. An old daemon must be shut down,
+migrated and resumed before checkpoints are available.
+
+A user-managed measurement sequence:
+
+```bash
+codex-limit-estimator checkpoint --wait --json
+# Record the returned baseline snapshot ID; run your own workload independently.
+codex-limit-estimator checkpoint --wait --json
+# Record the returned final snapshot ID, then substitute both IDs below.
+codex-limit-estimator analyze --snapshot-from BASELINE_ID --snapshot-to FINAL_ID
+```
+
+Snapshot-ID bounds are inclusive and intersect other filters. This additional
+selector makes checkpoint measurements reproducible without rounding timestamps
+or adjusting a half-open time range. Resets/pauses between endpoints still leave
+excluded gaps and separate compatible intervals. A checkpoint cannot eliminate
+provider reporting lag. You may wait for observations to settle and record a
+later final checkpoint before pausing; immediate final accounting is not promised.

@@ -215,7 +215,8 @@ def quota_range(segment, snapshots, remaining_from, remaining_to, allow_partial=
 
 def analyze_history(history, *, run_ids=None, segment_ids=None, label=None, start=None,
                     end=None, group_by='run', across_runs=False, known_runs=None,
-                    remaining_from=None, remaining_to=None, allow_partial=False):
+                    remaining_from=None, remaining_to=None, allow_partial=False,
+                    snapshot_from=None, snapshot_to=None):
     """Pure observation selection and aggregation. All selectors intersect."""
     if group_by not in ('run', 'day', 'overall'):
         raise ValueError('group-by must be run, day or overall')
@@ -229,6 +230,12 @@ def analyze_history(history, *, run_ids=None, segment_ids=None, label=None, star
         raise ValueError('Require 100 >= --remaining-from > --remaining-to >= 0')
     if allow_partial and not ranged:
         raise ValueError('--allow-partial requires both remaining thresholds')
+    if snapshot_from is not None or snapshot_to is not None:
+        if snapshot_from is None or snapshot_to is None or not 0 < snapshot_from < snapshot_to:
+            raise ValueError('Require 0 < --snapshot-from < --snapshot-to (inclusive observed IDs)')
+        observed_ids = {r['id'] for s in history for r in s['snapshots']}
+        if snapshot_from not in observed_ids or snapshot_to not in observed_ids:
+            raise ValueError('Unknown snapshot ID')
     run_ids, segment_ids = set(run_ids or []), set(segment_ids or [])
     available_runs = {s.get('run_id') or 'legacy' for s in history} | set(known_runs or [])
     if run_ids - available_runs:
@@ -244,7 +251,8 @@ def analyze_history(history, *, run_ids=None, segment_ids=None, label=None, star
         if label is not None and seg['label'] != label:
             continue
         snapshots = [s for s in seg['snapshots'] if (start is None or s['ts'] >= start)
-                     and (end is None or s['ts'] < end)]
+                     and (end is None or s['ts'] < end)
+                     and (snapshot_from is None or snapshot_from <= s['id'] <= snapshot_to)]
         if ranged:
             snapshots, candidate = quota_range(seg, snapshots, remaining_from, remaining_to, allow_partial)
             candidates.append(candidate)
@@ -307,6 +315,7 @@ def analyze_history(history, *, run_ids=None, segment_ids=None, label=None, star
                      uncovered_end_seconds=max(0, end-last['ts']) if last and end is not None else None,
                      endpoints=endpoints, selected_segment_ids=selected,
                      remaining_from=remaining_from, remaining_to=remaining_to, allow_partial=allow_partial,
+                     snapshot_from=snapshot_from, snapshot_to=snapshot_to,
                      group_by=group_by, across_runs=across_runs, time_convention='[start, end)')
     included = [r for r in rows if r['included']]
     estimable = any(r['estimate'] is not None for r in results)

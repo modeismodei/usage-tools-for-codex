@@ -168,12 +168,12 @@ Implement this **new** command:
 codex-limit-estimator checkpoint --wait
 ```
 
-- [ ] Request an immediate sample from the existing daemon through local control state. Do not spawn a second collector.
-- [ ] Use a request ID and acknowledgement with the resulting snapshot ID; do not overwrite pending pause/shutdown requests.
-- [ ] Bound the wait with a documented timeout and surface collection errors. Do not retry indefinitely.
-- [ ] Refuse clearly when the daemon is absent or paused; do not silently resume it.
-- [ ] Document a workload measurement sequence: baseline checkpoint, run the user's workload, final checkpoint, analyze the recorded endpoints.
-- [ ] Explain that a checkpoint cannot eliminate provider reporting lag. The user may wait for observations to settle before pausing; do not promise immediate final accounting.
+- [x] Request an immediate sample from the existing daemon through local control state. Do not spawn a second collector.
+- [x] Use a request ID and acknowledgement with the resulting snapshot ID; do not overwrite pending pause/shutdown requests.
+- [x] Bound the wait with a documented timeout and surface collection errors. Do not retry indefinitely.
+- [x] Refuse clearly when the daemon is absent or paused; do not silently resume it.
+- [x] Document a workload measurement sequence: baseline checkpoint, run the user's workload, final checkpoint, analyze the recorded endpoints.
+- [x] Explain that a checkpoint cannot eliminate provider reporting lag. The user may wait for observations to settle before pausing; do not promise immediate final accounting.
 
 **Acceptance:** one request produces one acknowledged sample, failures terminate predictably, and no model turns or agent notifications are introduced.
 

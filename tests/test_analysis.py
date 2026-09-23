@@ -153,6 +153,14 @@ class Aggregation(unittest.TestCase):
         self.assertTrue(group['partial_pricing'])
         self.assertFalse(group['coverage_known'])
 
+    def test_checkpoint_endpoint_ids_select_exact_observations(self):
+        result = analyze_history(history(MIDNIGHT), snapshot_from=14, snapshot_to=15)
+        self.assertEqual(result['groups'][0]['delta']['cost'], 6)
+        self.assertEqual(result['selection']['effective_start']['snapshot_id'], 14)
+        for a, b in ((14, None), (15, 14), (0, 15), (14, 999)):
+            with self.assertRaises(ValueError):
+                analyze_history(history(MIDNIGHT), snapshot_from=a, snapshot_to=b)
+
 
 class QuotaRanges(unittest.TestCase):
     def select(self, source, **options):

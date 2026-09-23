@@ -1,7 +1,7 @@
 import fcntl,hashlib,json,os,pathlib,sqlite3,time,uuid
 from contextlib import closing,contextmanager
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 BASE_SCHEMA = '''
 CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -39,6 +39,11 @@ def _migration_v1(db):
     db.execute('CREATE INDEX snapshot_segment ON snapshots(segment,id)')
 
 
+def _migration_v2(db):
+    db.execute('''CREATE TABLE checkpoints(id TEXT PRIMARY KEY, requested REAL, expires REAL,
+                  daemon_instance TEXT, status TEXT, snapshot_id INTEGER, error TEXT)''')
+
+
 def _migrate(db, path):
     version = db.execute('PRAGMA user_version').fetchone()[0]
     if version == SCHEMA_VERSION:
@@ -56,6 +61,8 @@ def _migrate(db, path):
     try:
         if version < 1:
             _migration_v1(db)
+        if version < 2:
+            _migration_v2(db)
         db.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
         db.commit()
     except BaseException:

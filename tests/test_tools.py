@@ -96,13 +96,15 @@ class Tests(unittest.TestCase):
   self.assertTrue(any('56%' in text for text,_ in rows))
  def test_fake_rpc_allowlist(self):
   fake=self.root/'fake-codex';audit=self.root/'audit';fake.write_text('''#!/usr/bin/env python3
-import json,sys
+import json,sys,os
 assert sys.argv[1:]==['app-server']
 for line in sys.stdin:
  m=json.loads(line)
  with open(__file__+'.audit','a') as f:f.write(m['method']+'\\n')
  assert m['method'] in ['initialize','initialized','account/read','account/rateLimits/read']
  if m['method']=='initialized':continue
+ if m['method']=='account/read' and os.path.exists(__file__+'.fail'):
+  print(json.dumps({'id':m['id'],'error':{'code':-1}}),flush=True);continue
  if m['method']=='account/read':result={'account':{'type':'chatgpt','email':'fake@example.invalid','planType':'pro'}}
  elif m['method']=='account/rateLimits/read':result={'rateLimits':{'limitId':'codex','primary':{'usedPercent':44,'windowDurationMins':10080,'resetsAt':9999999999},'secondary':None}}
  else:result={}
@@ -126,6 +128,15 @@ for line in sys.stdin:
    self.fail('Expected phase '+phase+'; got '+str(get(live,'status')))
   try:
    wait_phase('tracking');self.assertTrue(running(state))
+   count=live.execute('SELECT count(*) FROM snapshots').fetchone()[0]
+   checkpoint=subprocess.run(cmd+['checkpoint','--wait','--json','--timeout','3','--data-dir',str(state)],capture_output=True,text=True,timeout=5)
+   self.assertEqual(checkpoint.returncode,0,checkpoint.stderr)
+   acknowledgement=json.loads(checkpoint.stdout)
+   self.assertEqual(acknowledgement['status'],'complete')
+   self.assertEqual(live.execute('SELECT count(*) FROM snapshots').fetchone()[0],count+1)
+   self.assertEqual(acknowledgement['snapshot_id'],get(live,'status')['snapshot_id'])
+   inspected=subprocess.run(cmd+['checkpoint','--request-id',acknowledgement['id'],'--json','--data-dir',str(state)],capture_output=True,text=True,check=True)
+   self.assertEqual(json.loads(inspected.stdout),acknowledgement)
    # Exercise curses with a real pseudoterminal. q must leave collection running.
    import pty,fcntl,termios,struct
    master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',40,110,0,0))
@@ -139,7 +150,16 @@ for line in sys.stdin:
     if ui.poll() is None:ui.kill();ui.wait()
     os.close(master)
    subprocess.run(cmd+['stop','--data-dir',str(state)],capture_output=True,check=True);wait_phase('paused')
+   rejected=subprocess.run(cmd+['checkpoint','--wait','--data-dir',str(state)],capture_output=True,text=True)
+   self.assertNotEqual(rejected.returncode,0)
+   self.assertIn('paused',rejected.stderr)
+   self.assertTrue(get(live,'control')['paused'])
    subprocess.run(cmd+['resume','--data-dir',str(state)],capture_output=True,check=True);wait_phase('tracking')
+   pathlib.Path(str(fake)+'.fail').write_text('synthetic failure')
+   failed=subprocess.run(cmd+['checkpoint','--wait','--timeout','3','--data-dir',str(state)],capture_output=True,text=True,timeout=5)
+   self.assertNotEqual(failed.returncode,0)
+   self.assertIn('failed',failed.stderr)
+   self.assertIn('RPC account/read',failed.stderr)
   finally:
    subprocess.run(cmd+['shutdown','--data-dir',str(state)],capture_output=True)
    deadline=time.monotonic()+5

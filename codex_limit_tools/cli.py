@@ -4,7 +4,7 @@ from .usage import load_prices,index,aggregate,compact
 from .estimate import (report, report_history, load_history, segment_summaries, analyze_history,
                        parse_time, EXPORT_SCHEMA_VERSION)
 from .render import DAILY_CSV_FIELDS, analysis_lines, analysis_csv_rows
-from .tracker import daemon,running
+from .tracker import daemon,running,request_checkpoint,wait_checkpoint,checkpoint_record,CHECKPOINT_TIMEOUT
 from .quota import QuotaSource
 
 PACKAGE=pathlib.Path(__file__).resolve().parent.parent
@@ -89,7 +89,7 @@ def export_file(dest, data, view):
 def estimator(argv=None):
     p = argparse.ArgumentParser(description='Read-only local Codex allowance estimator. No model turns or agent messages.')
     p.add_argument('action', nargs='?', default='ui', choices=['ui','start','stop','resume','shutdown','status',
-                   'report','export','prices','migrate','runs','segments','analyze','_daemon'])
+                   'report','export','prices','migrate','runs','segments','analyze','checkpoint','_daemon'])
     p.add_argument('target', nargs='?')
     p.add_argument('file', nargs='?')
     p.add_argument('--data-dir')
@@ -115,8 +115,17 @@ def estimator(argv=None):
     p.add_argument('--remaining-from', type=float)
     p.add_argument('--remaining-to', type=float)
     p.add_argument('--allow-partial', action='store_true')
+    p.add_argument('--snapshot-from', type=int, help='Inclusive observed baseline snapshot ID (paired with --snapshot-to)')
+    p.add_argument('--snapshot-to', type=int, help='Inclusive observed final snapshot ID')
+    p.add_argument('--wait', action='store_true', help='Wait for checkpoint acknowledgement')
+    p.add_argument('--timeout', type=float, default=CHECKPOINT_TIMEOUT, help='Checkpoint timeout in seconds (default 90, maximum 300)')
+    p.add_argument('--request-id', help='Inspect an existing checkpoint instead of requesting another sample')
     a = p.parse_args(argv)
     path = data_path(a.data_dir)
+    if not 0 < a.timeout <= 300:
+        p.error('--timeout must be in (0,300] seconds')
+    if (a.wait or a.request_id or a.timeout != CHECKPOINT_TIMEOUT) and a.action != 'checkpoint':
+        p.error('--wait, --timeout and --request-id require checkpoint')
     if a.interval < 30 or not 0 < a.resolution <= 100 or not 0 < a.min_points <= 100:
         p.error('interval >=30, resolution/min-points in (0,100] required')
     if (a.target or a.file) and a.action not in ('start', 'prices'):
@@ -126,7 +135,8 @@ def estimator(argv=None):
     if a.view and a.action != 'export':
         p.error('--view requires export')
     analysis_options = (a.group_by or a.across_runs or a.remaining_from is not None
-                        or a.remaining_to is not None or a.allow_partial)
+                        or a.remaining_to is not None or a.allow_partial
+                        or a.snapshot_from is not None or a.snapshot_to is not None)
     if analysis_options and not (a.action == 'analyze' or a.action == 'export' and a.view == 'analysis'):
         p.error('Grouping and quota-range options require analyze or export --view analysis')
     if a.output and a.action != 'export':
@@ -144,7 +154,8 @@ def estimator(argv=None):
         filters = dict(run_ids=a.run, segment_ids=ids, label=a.label,
                        start=parse_time(a.from_time), end=parse_time(a.to_time, end=True),
                        group_by=a.group_by or 'run', across_runs=a.across_runs,
-                       remaining_from=a.remaining_from, remaining_to=a.remaining_to, allow_partial=a.allow_partial)
+                       remaining_from=a.remaining_from, remaining_to=a.remaining_to, allow_partial=a.allow_partial,
+                       snapshot_from=a.snapshot_from, snapshot_to=a.snapshot_to)
     except ValueError as exc:
         p.error(str(exc))
     if a.action == 'prices':
@@ -163,7 +174,7 @@ def estimator(argv=None):
     if a.action == '_daemon':
         daemon(path);return
     read_only = a.action in ('runs','segments','analyze','status','report','export')
-    if (read_only or a.action in ('ui','stop','resume','shutdown')) and not (path/'tracking.sqlite3').exists():
+    if (read_only or a.action in ('ui','stop','resume','shutdown','checkpoint')) and not (path/'tracking.sqlite3').exists():
         raise ValueError('No tracking history; start tracking or choose an existing --data-dir')
     db = connect(path, readonly=read_only, migrate=a.action in ('start','resume','migrate'))
     try:
@@ -191,6 +202,15 @@ def estimator(argv=None):
             print(f'Database schema {SCHEMA_VERSION}; historical observations retained.')
         elif a.action in ('stop','resume','shutdown'):
             control(db, path, a.action)
+        elif a.action == 'checkpoint':
+            row = checkpoint_record(db, a.request_id) if a.request_id else request_checkpoint(db, path, a.timeout)
+            if a.wait:
+                row = wait_checkpoint(db, path, row['id'], a.timeout)
+            if a.json:
+                print(json.dumps(row, indent=2))
+            else:
+                print(f"Checkpoint {row['id']}: {row['status']} | snapshot {row['snapshot_id'] if row['snapshot_id'] is not None else 'pending'}")
+                if row['error']:print('Error: '+row['error'])
         elif read_only:
             with read_snapshot(db):
                 if a.action in ('status','report'):

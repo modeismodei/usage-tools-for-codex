@@ -44,6 +44,7 @@ class AnalysisCLI(unittest.TestCase):
         self.assertEqual(segments['segments'][0]['remaining_start'],73)
         for args in (['--run',self.run], ['--segments','1,1'], ['--from','1970-01-01','--to','1970-01-01'],
                      ['--label','synthetic','--group-by','overall'], ['--run',self.run,'--group-by','day'],
+                     ['--snapshot-from','1','--snapshot-to','2'],
                      ['--run',self.run,'--remaining-from','73','--remaining-to','40']):
             result = json.loads(self.command('analyze',*args,'--json').stdout)
             self.assertEqual(result['schema_version'],2)
