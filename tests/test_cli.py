@@ -109,3 +109,11 @@ class AnalysisCLI(unittest.TestCase):
         self.command('status',path=path)
         self.assertEqual(list(db.iterdump()),before)
         self.assertFalse(list(path.glob('*.backup-*')))
+
+    def test_daily_text_report_labels_partial_monetary_totals(self):
+        metrics = dict(LARGE[-1]['metrics'], priced_tokens=1650, unpriced_tokens=1650)
+        self.db.execute('UPDATE snapshots SET metrics=? WHERE id=2',(json.dumps(metrics),))
+        self.db.commit()
+        result = self.command('report')
+        self.assertIn('partial pricing',result.stdout)
+        self.assertIn('unpriced tokens 1,650',result.stdout)

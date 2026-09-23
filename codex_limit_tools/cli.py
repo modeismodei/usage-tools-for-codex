@@ -39,7 +39,9 @@ def text_report(db,c,data=None):
     for d in data['daily']:
         cost=f"{d['api_equivalent_per_100']:,.2f}" if d['api_equivalent_per_100'] is not None else 'n/a'
         coverage=f"{d['priced_coverage']:.1f}" if d['priced_coverage'] is not None else 'unknown'
-        print(f"{d['day']}  {cost:>12} {d['points']:>10.2f} {d['cache_share']:>9.1f} {coverage:>10}   {d['label']}")
+        pricing='; partial pricing' if d['partial_pricing'] else ''
+        print(f"{d['day']}  {cost:>12} {d['points']:>10.2f} {d['cache_share']:>9.1f} {coverage:>10}   {d['label']}"
+              f"{pricing}; unpriced tokens {d['unpriced_tokens']:,.0f}")
     if not data['daily']:print('Collecting: no estimable segment yet.')
     return data
 
