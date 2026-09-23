@@ -2,7 +2,7 @@
 
 ## Objective
 
-Extend the existing Codex Limit Tools bundle to estimate the API-equivalent cost and token volumes corresponding to 100% of weekly allowance from large observed consumption intervals, such as 73% remaining to 40% remaining, and from multiple compatible segments. Reuse the existing tracker, SQLite history, response index, and frozen JSON price snapshots.
+Extend the existing Usage Tools for Codex bundle to estimate the API-equivalent cost and token volumes corresponding to 100% of weekly allowance from large observed consumption intervals, such as 73% remaining to 40% remaining, and from multiple compatible segments. Reuse the existing tracker, SQLite history, response index, and frozen JSON price snapshots.
 
 Implement these tasks in dependency order. Make routine implementation decisions autonomously, preserve unrelated work, and record material deviations. This document specifies future changes; commands marked **new** are not available in the original bundle.
 

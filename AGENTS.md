@@ -1,4 +1,4 @@
-# Agent Instructions — Codex Limit Tools
+# Agent Instructions — Usage Tools for Codex
 
 ## Scope and execution
 

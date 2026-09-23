@@ -1,4 +1,4 @@
-# Codex Limit Tools — Initial and Intermediate Commits
+# Usage Tools for Codex — Initial and Intermediate Commits
 
 ## Repository layout
 
@@ -94,6 +94,7 @@ backups/
 /dist/
 /build/
 /Codex-Limit-Tools*.zip
+/usage-tools-for-codex*.zip
 ```
 
 Use synthetic fixtures in an explicitly reviewed test location. If a future test genuinely requires a JSONL fixture, add a narrow exception for that fixture rather than removing the general transcript exclusion.
@@ -161,7 +162,7 @@ Inspect names, email addresses, personal paths, credentials, and real account da
 For a new repository containing the original bundle:
 
 ```bash
-git commit -m "chore: establish Codex limit tools baseline and analysis backlog"
+git commit -m "chore: establish Usage Tools for Codex baseline and analysis backlog"
 git log -1 --oneline
 git status --short
 ```

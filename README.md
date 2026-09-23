@@ -1,10 +1,18 @@
-# Codex limit tools
+# Usage Tools for Codex
+
+`usage-tools-for-codex` is an independent community project, not affiliated with
+or endorsed by OpenAI.
 
 A project-independent, non-agentic bundle for measuring local token activity per
 percentage point of account quota. Bash is needed only for installation; runtime
 uses Python 3.10+ standard libraries, SQLite, curses, and your authenticated Codex
 CLI. No pip dependencies, API key, extra model session, prompt injection, or
 quota heartbeat messages are used.
+
+The command names remain `codex-usage`, `codex-quota`, and
+`codex-limit-estimator`. The internal Python package `codex_limit_tools`,
+installation directory `codex-limit-tools`, and existing configuration and state
+paths retain their original names for compatibility.
 
 ## Install and start
 

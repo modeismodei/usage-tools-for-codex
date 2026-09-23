@@ -3,7 +3,7 @@ set -euo pipefail
 bundle_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 exec python3 - "$bundle_dir" "$@" <<'PY'
 import argparse,os,pathlib,shutil,time
-p=argparse.ArgumentParser(description='Install Codex limit tools for the current user; never changes watch-codex-quota.')
+p=argparse.ArgumentParser(description='Install Usage Tools for Codex for the current user; never changes watch-codex-quota.')
 p.add_argument('source');p.add_argument('--prefix',default=str(pathlib.Path.home()/'.local'))
 a=p.parse_args();source=pathlib.Path(a.source);prefix=pathlib.Path(a.prefix).expanduser().resolve()
 dest=prefix/'lib/codex-limit-tools';bin_dir=prefix/'bin';suffix=time.strftime('%Y%m%d-%H%M%S')

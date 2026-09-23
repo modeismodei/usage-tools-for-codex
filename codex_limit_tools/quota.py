@@ -68,7 +68,7 @@ class RPC:
             return msg.get('result')
 
     def initialize(self):
-        self.call('initialize', {'clientInfo': {'name': 'codex_limit_tools', 'version': '2.0.0'}})
+        self.call('initialize', {'clientInfo': {'name': 'usage_tools_for_codex', 'version': '2.0.0'}})
         self.send({'method': 'initialized', 'params': {}})
 
 def number(x):
