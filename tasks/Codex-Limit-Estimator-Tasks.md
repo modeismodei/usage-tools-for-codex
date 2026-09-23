@@ -60,12 +60,12 @@ Compatible segments may describe more than 100 percentage points of observed con
 
 **Dependencies:** T01. **Primary files:** `common.py`, `cli.py`, `tracker.py`.
 
-- [ ] Introduce a schema version and transactional, repeatable migrations.
-- [ ] Assign a stable UUID to each new configured run. Associate new segments with it and retain label, frozen price snapshot/hash, start time, and relevant configuration.
-- [ ] Resume/restart the same configured run with its existing UUID; `--new-run` creates a new UUID.
-- [ ] Represent legacy segments without inventing their original run boundaries: mark their run identity as legacy/unknown while retaining their IDs and data.
-- [ ] Coordinate migration with the daemon lock. Refuse migration while an old collector is active; give actionable shutdown instructions.
-- [ ] Back up an existing database using SQLite's backup API before migration. Preserve configuration and prices. Reject unsupported newer schemas clearly.
+- [x] Introduce a schema version and transactional, repeatable migrations.
+- [x] Assign a stable UUID to each new configured run. Associate new segments with it and retain label, frozen price snapshot/hash, start time, and relevant configuration.
+- [x] Resume/restart the same configured run with its existing UUID; `--new-run` creates a new UUID.
+- [x] Represent legacy segments without inventing their original run boundaries: mark their run identity as legacy/unknown while retaining their IDs and data.
+- [x] Coordinate migration with the daemon lock. Refuse migration while an old collector is active; give actionable shutdown instructions.
+- [x] Back up an existing database using SQLite's backup API before migration. Preserve configuration and prices. Reject unsupported newer schemas clearly.
 
 **Acceptance:** an original-format database retains all historical rows and estimates; repeated startup does not duplicate runs or migrations; migration failure leaves recoverable data.
 

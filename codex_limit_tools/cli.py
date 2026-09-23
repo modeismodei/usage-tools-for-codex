@@ -1,5 +1,5 @@
 import argparse,csv,json,os,pathlib,subprocess,sys,time
-from .common import connect,get,put,event,data_path,fingerprint
+from .common import connect,get,put,event,data_path,fingerprint,ensure_run,SCHEMA_VERSION
 from .usage import load_prices,index,aggregate,compact
 from .estimate import report
 from .tracker import daemon,running
@@ -35,7 +35,7 @@ def text_report(db,c):
 
 def estimator(argv=None):
     p=argparse.ArgumentParser(description='Read-only local Codex allowance estimator. No model turns or agent messages.')
-    p.add_argument('action',nargs='?',default='ui',choices=['ui','start','stop','resume','shutdown','status','report','export','prices','_daemon'])
+    p.add_argument('action',nargs='?',default='ui',choices=['ui','start','stop','resume','shutdown','status','report','export','prices','migrate','_daemon'])
     p.add_argument('target',nargs='?');p.add_argument('file',nargs='?')
     p.add_argument('--data-dir');p.add_argument('--codex-home',default=os.environ.get('CODEX_HOME',str(pathlib.Path.home()/'.codex')))
     p.add_argument('--codex-bin',default='codex');p.add_argument('--bucket',default='codex')
@@ -57,7 +57,8 @@ def estimator(argv=None):
             print(f'Imported {dest}. Active tracking keeps its frozen snapshot.');return
         p.error('Use prices path | prices validate [FILE] | prices import FILE')
     if a.action=='_daemon':daemon(path);return
-    db=connect(path)
+    # Shutdown must still work against a legacy database while its daemon holds the lock.
+    db=connect(path,migrate=a.action not in ('stop','shutdown'))
     try:
         if a.action=='start':
             if a.target!='tracking':p.error('Use start tracking')
@@ -70,12 +71,13 @@ def estimator(argv=None):
                     c={'codex_home':str(pathlib.Path(a.codex_home).expanduser().resolve()),'codex_bin':a.codex_bin,'bucket':a.bucket,
                        'prices':load_prices(config_prices(a.prices)),'interval':a.interval,'resolution':a.resolution,
                        'min_points':a.min_points,'label':a.label,'started_at':time.time()}
-                    put(db,'config',c)
+                c=ensure_run(db,c)
                 put(db,'control',{'paused':False,'shutdown':False});put(db,'status',{'phase':'starting'})
                 db.commit();start_process(path);print(f'Tracking started. State: {path}')
             if not a.background and sys.stdin.isatty() and sys.stdout.isatty():
                 from .tui import show
                 show(path)
+        elif a.action=='migrate':print(f'Database schema {SCHEMA_VERSION}; historical observations retained.')
         elif a.action in ('stop','resume','shutdown'):control(db,path,a.action)
         elif a.action in ('status','report','export'):
             c=get(db,'config',{});data=report(db,c);data['status']=get(db,'status',{});data['daemon_running']=running(path)

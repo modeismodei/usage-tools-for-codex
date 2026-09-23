@@ -29,3 +29,18 @@ For included intervals, use `100 * sum(delta) / sum(points)`, including interval
 with zero quota movement. Do not average segment ratios. Synthetic fixtures in
 `tests/analysis_fixtures.py` state independent expected totals, including
 33 points/$132 => $400 and 1 point/$10 + 9 points/$18 => $280 per 100 points.
+
+## Persistent history
+
+SQLite schema 1 adds configured-run UUIDs. New segments reference their run;
+legacy segments keep a null run ID because their original membership is unknown.
+Resuming a saved configuration retains its UUID and prices. A new configuration
+created with `--new-run` gets a new UUID. Registering a resumed legacy
+configuration affects future segments only.
+
+`codex-limit-estimator migrate` upgrades history without contacting Codex.
+Migration uses the collector lock, SQLite's backup API and a transaction. Existing
+databases get a uniquely named `tracking.sqlite3.backup-v...` file before changes;
+failures roll back and retain that backup. Newer unsupported schemas are refused.
+Shutdown still works against the original schema. Stop the collector and confirm
+it is offline before migration; no old observations are repriced or bridged.
