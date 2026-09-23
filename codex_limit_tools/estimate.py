@@ -180,8 +180,42 @@ def summarize(intervals):
     return result
 
 
+def quota_range(segment, snapshots, remaining_from, remaining_to, allow_partial=False):
+    """Select observed crossings in this segment, never synthesize a threshold hit."""
+    def endpoint(s):
+        return {'snapshot_id': s['id'], 'ts': s['ts'], 'remaining': 100-s['used']}
+    candidate = dict(source_segment_id=segment['id'], source_run_id=segment.get('run_id'),
+                     requested_remaining_from=remaining_from, requested_remaining_to=remaining_to,
+                     status='start_not_recorded', start=None, end=None,
+                     last_available=endpoint(snapshots[-1]) if snapshots else None)
+    first = next((i for i, s in enumerate(snapshots)
+                  if 100-s['used'] == remaining_from or
+                  (i > 0 and 100-snapshots[i-1]['used'] > remaining_from >= 100-s['used'])), None)
+    if first is None:
+        return [], candidate
+    candidate['start'] = endpoint(snapshots[first])
+    if 100-snapshots[first]['used'] <= remaining_to:
+        candidate['status'] = 'thresholds_skipped_in_one_observation'
+        return [], candidate
+    last = next((i for i in range(first+1, len(snapshots))
+                 if 100-snapshots[i-1]['used'] > remaining_to >= 100-snapshots[i]['used']), None)
+    candidate['status'] = 'complete' if last is not None else 'end_not_reached'
+    if last is None and allow_partial and first < len(snapshots)-1:
+        last = len(snapshots)-1
+        candidate['status'] = 'partial'
+    if last is None:
+        return [], candidate
+    chosen = snapshots[first:last+1]
+    if any(not analysis_interval(segment, a, b)['included'] for a, b in zip(chosen, chosen[1:])):
+        candidate['status'] = 'discontinuous_observations'
+        return [], candidate
+    candidate['end'] = endpoint(snapshots[last])
+    return chosen, candidate
+
+
 def analyze_history(history, *, run_ids=None, segment_ids=None, label=None, start=None,
-                    end=None, group_by='run', across_runs=False, known_runs=None):
+                    end=None, group_by='run', across_runs=False, known_runs=None,
+                    remaining_from=None, remaining_to=None, allow_partial=False):
     """Pure observation selection and aggregation. All selectors intersect."""
     if group_by not in ('run', 'day', 'overall'):
         raise ValueError('group-by must be run, day or overall')
@@ -189,13 +223,19 @@ def analyze_history(history, *, run_ids=None, segment_ids=None, label=None, star
         raise ValueError('--across-runs requires --group-by overall or day')
     if start is not None and end is not None and start >= end:
         raise ValueError('--from must precede --to')
+    ranged = remaining_from is not None or remaining_to is not None
+    if ranged and (remaining_from is None or remaining_to is None
+                   or not 100 >= remaining_from > remaining_to >= 0):
+        raise ValueError('Require 100 >= --remaining-from > --remaining-to >= 0')
+    if allow_partial and not ranged:
+        raise ValueError('--allow-partial requires both remaining thresholds')
     run_ids, segment_ids = set(run_ids or []), set(segment_ids or [])
     available_runs = {s.get('run_id') or 'legacy' for s in history} | set(known_runs or [])
     if run_ids - available_runs:
         raise ValueError('Unknown run ID: ' + ', '.join(sorted(run_ids-available_runs)))
     if segment_ids - {s['id'] for s in history}:
         raise ValueError('Unknown segment ID: ' + ', '.join(map(str, sorted(segment_ids-{s['id'] for s in history}))))
-    selected, intervals, excluded, endpoints = [], {}, [], []
+    selected, intervals, excluded, endpoints, candidates = [], {}, [], [], []
     for seg in history:
         if run_ids and (seg.get('run_id') or 'legacy') not in run_ids:
             continue
@@ -205,6 +245,9 @@ def analyze_history(history, *, run_ids=None, segment_ids=None, label=None, star
             continue
         snapshots = [s for s in seg['snapshots'] if (start is None or s['ts'] >= start)
                      and (end is None or s['ts'] < end)]
+        if ranged:
+            snapshots, candidate = quota_range(seg, snapshots, remaining_from, remaining_to, allow_partial)
+            candidates.append(candidate)
         if not snapshots:
             continue
         selected.append(seg['id'])
@@ -218,6 +261,7 @@ def analyze_history(history, *, run_ids=None, segment_ids=None, label=None, star
             if first['id'] not in selected_ids or last['id'] not in selected_ids:
                 continue
             row = analysis_interval(seg, first, last)
+            row['partial_selection'] = ranged and candidate['status'] == 'partial'
             intervals[row['interval_id']] = row
     # Boundaries remain excluded, including original midnight segmentation.
     by_id = {s['id']: s for s in history}
@@ -238,17 +282,22 @@ def analyze_history(history, *, run_ids=None, segment_ids=None, label=None, star
         compatibility = row['compatibility']
         run = '' if across_runs else row['source_run_id'] or f"legacy:{row['source_segment_id']}"
         day = stamp(row['end']['ts'])[:10] if group_by == 'day' else ''
-        key = (day, run, compatibility['price_hash'], compatibility['meter_hash'], compatibility['label'])
+        key = (day, run, compatibility['price_hash'], compatibility['meter_hash'], compatibility['label'],
+               row['source_segment_id'] if ranged else 0)
         groups[key].append(row)
     results = []
-    for key, candidates in sorted(groups.items()):
-        result = summarize([r for r in candidates if r['included']])
+    for key, members in sorted(groups.items()):
+        result = summarize([r for r in members if r['included']])
         result.update(group_by=group_by, day=key[0] or None, run_id=key[1] or None,
                       price_hash=key[2], meter_hash=key[3], label=key[4],
-                      excluded_interval_count=sum(not r['included'] for r in candidates))
+                      candidate_segment_id=key[5] or None,
+                      partial_selection=any(r['partial_selection'] for r in members),
+                      excluded_interval_count=sum(not r['included'] for r in members))
         if result['excluded_interval_count']:
             result['quality'] += '; invalid or discontinuous intervals excluded'
-        result['selected_segment_ids'] = sorted({r['source_segment_id'] for r in candidates})
+        if result['partial_selection']:
+            result['quality'] += '; partial quota range'
+        result['selected_segment_ids'] = sorted({r['source_segment_id'] for r in members})
         results.append(result)
     first = min((e['start'] for e in endpoints), key=lambda e: e['ts'], default=None)
     last = max((e['end'] for e in endpoints), key=lambda e: e['ts'], default=None)
@@ -257,11 +306,12 @@ def analyze_history(history, *, run_ids=None, segment_ids=None, label=None, star
                      uncovered_start_seconds=max(0, first['ts']-start) if first and start is not None else None,
                      uncovered_end_seconds=max(0, end-last['ts']) if last and end is not None else None,
                      endpoints=endpoints, selected_segment_ids=selected,
+                     remaining_from=remaining_from, remaining_to=remaining_to, allow_partial=allow_partial,
                      group_by=group_by, across_runs=across_runs, time_convention='[start, end)')
     included = [r for r in rows if r['included']]
     estimable = any(r['estimate'] is not None for r in results)
     return {'schema_version': EXPORT_SCHEMA_VERSION, 'selection': selection, 'groups': results,
-            'intervals': rows, 'excluded_intervals': excluded, 'range_candidates': [],
+            'intervals': rows, 'excluded_intervals': excluded, 'range_candidates': candidates,
             'excluded_duration': sum(max(0, r['duration']) for r in excluded),
             'coverage': {'included_interval_count': len(included),
                          'source_segment_count': len({r['source_segment_id'] for r in included}),
@@ -302,16 +352,19 @@ def segments(db, config=None):
 
 def report(db, config=None):
     with read_snapshot(db):
-        history = load_history(db)
-        analysis = analyze_history(history, group_by='day', across_runs=True)
-        daily = []
-        for group in analysis['groups']:
-            row = dict(group)
-            row.update({k: group['delta'][k] for k in FIELDS})
-            row['segments'] = group['source_segment_count']
-            row['api_equivalent_per_100'] = group['estimate']['cost'] if group['estimate'] else None
-            for key in ('input', 'noncached', 'cached', 'output', 'reasoning'):
-                row[key+'_per_100'] = group['estimate'][key] if group['estimate'] else None
-            daily.append(row)
-        return {'schema_version': EXPORT_SCHEMA_VERSION, 'segments': segment_summaries(history),
-                'daily': daily, 'analysis': analysis}
+        return report_history(load_history(db))
+
+
+def report_history(history):
+    analysis = analyze_history(history, group_by='day', across_runs=True)
+    daily = []
+    for group in analysis['groups']:
+        row = dict(group)
+        row.update({k: group['delta'][k] for k in FIELDS})
+        row['segments'] = group['source_segment_count']
+        row['api_equivalent_per_100'] = group['estimate']['cost'] if group['estimate'] else None
+        for key in ('input', 'noncached', 'cached', 'output', 'reasoning'):
+            row[key+'_per_100'] = group['estimate'][key] if group['estimate'] else None
+        daily.append(row)
+    return {'schema_version': EXPORT_SCHEMA_VERSION, 'segments': segment_summaries(history),
+            'daily': daily, 'analysis': analysis}

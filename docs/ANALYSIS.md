@@ -80,3 +80,36 @@ then remain partial. Unpriced tokens are retained. Observed quota points, priced
 coverage and rounding bounds are distinct from statistical confidence and from
 an official allowance. More than 100 observed points are an aggregate equivalent
 across replenishments, not one complete weekly cycle.
+
+## Offline commands and quota ranges
+
+`runs`, `segments`, `analyze`, `report`, `status` and `export` open existing history
+read-only and use a consistent SQLite read transaction. They work without a
+daemon, a Codex executable or login. They do not migrate or refresh history.
+Use `migrate` separately, or let controlled tracking startup migrate. Original
+schema history is readable with `--run legacy` even before migration.
+
+`--run` and `--segments` may be repeated; comma-separated segment IDs are also
+accepted. All filters intersect, and unknown IDs are errors. `--group-by run`
+is the default. Day and overall views also separate runs unless `--across-runs`
+is supplied. Groups order by UTC day, run and compatibility keys; observations
+order by time then segment/snapshot ID. `runs` orders by start and UUID, with the
+legacy/unknown inventory entry last. JSON stdout contains no progress messages.
+
+`--remaining-from 73 --remaining-to 40` finds the first recorded start crossing
+and subsequent end crossing inside each continuous selected segment. An initial
+observation exactly at the start threshold is a usable observed endpoint. An
+initial observation below it cannot establish the missing start. A 41% to 39%
+step uses 39%, never an invented 40%. If one sample skips both thresholds, there
+is no matched interval for that range. Candidates from different segments stay
+separate; use `--segments` to disambiguate. `--allow-partial` explicitly uses the
+last observation of an unfinished range and labels the result partial; it cannot
+recover an unrecorded start. Time filters apply before threshold selection.
+
+`export --view segments|snapshots|analysis --output FILE.csv|FILE.json` adds raw
+history and analysis exports. Analysis contains raw and normalized metrics,
+provenance, endpoint IDs and quality fields. New CSV views include schema version
+and encode nested fields as JSON cells. Snapshot exports retain cumulative
+metrics and segment compatibility/configuration so calculations are reproducible.
+A non-estimable analysis CSV contains a status row. Default daily CSV keeps its
+original header; default JSON keeps `segments`, `daily` and status fields.

@@ -131,11 +131,11 @@ codex-limit-estimator export --view snapshots --output snapshots.csv
 codex-limit-estimator export --view analysis --run RUN_ID --output analysis.json
 ```
 
-- [ ] Define filter intersection semantics, valid combinations, deterministic ordering, and useful errors for invalid/unknown IDs.
-- [ ] Preserve `report`, `report --json`, default daily CSV export, and normal TUI attachment.
-- [ ] Include both raw deltas and normalized per-100 metrics in analysis exports, plus provenance and quality fields.
-- [ ] Take a consistent database read snapshot while collection is active. Analysis commands must not refresh quota or mutate collection state; perform required migration separately at controlled startup.
-- [ ] Display source run/segment IDs and actual remaining-quota endpoints in human-readable tables.
+- [x] Define filter intersection semantics, valid combinations, deterministic ordering, and useful errors for invalid/unknown IDs.
+- [x] Preserve `report`, `report --json`, default daily CSV export, and normal TUI attachment.
+- [x] Include both raw deltas and normalized per-100 metrics in analysis exports, plus provenance and quality fields.
+- [x] Take a consistent database read snapshot while collection is active. Analysis commands must not refresh quota or mutate collection state; perform required migration separately at controlled startup.
+- [x] Display source run/segment IDs and actual remaining-quota endpoints in human-readable tables.
 
 **Acceptance:** commands work with the daemon offline; stdout JSON is parseable without progress chatter; invalid selectors exit nonzero and do not change state.
 
@@ -149,12 +149,12 @@ Implement this **new** form:
 codex-limit-estimator analyze --run RUN_ID --remaining-from 73 --remaining-to 40
 ```
 
-- [ ] Require `100 >= remaining-from > remaining-to >= 0`.
-- [ ] Search only within one continuous segment at a time. Select the first observed downward crossing of the start threshold and the first subsequent observed crossing of the end threshold.
-- [ ] Show requested thresholds and actual observed endpoints. A jump from 41% to 39% ends at the observed 39%, not a fabricated 40%.
-- [ ] Return separate candidates if multiple segments qualify; allow `--segments` to disambiguate. Never silently cross a replenishment.
-- [ ] If the start crossing is not recorded or the end is not yet reached, report that status. Offer an explicit partial-selection option using the last available observation, clearly labeled partial.
-- [ ] Retain the effective snapshot IDs so the result is reproducible from exported history.
+- [x] Require `100 >= remaining-from > remaining-to >= 0`.
+- [x] Search only within one continuous segment at a time. Select the first observed downward crossing of the start threshold and the first subsequent observed crossing of the end threshold.
+- [x] Show requested thresholds and actual observed endpoints. A jump from 41% to 39% ends at the observed 39%, not a fabricated 40%.
+- [x] Return separate candidates if multiple segments qualify; allow `--segments` to disambiguate. Never silently cross a replenishment.
+- [x] If the start crossing is not recorded or the end is not yet reached, report that status. Offer an explicit partial-selection option using the last available observation, clearly labeled partial.
+- [x] Retain the effective snapshot IDs so the result is reproducible from exported history.
 
 **Acceptance:** exact hits, skipped thresholds, unfinished ranges, and repeated crossings in different cycles are all handled deterministically.
 

@@ -152,3 +152,54 @@ class Aggregation(unittest.TestCase):
         self.assertIsNone(group['priced_coverage'])
         self.assertTrue(group['partial_pricing'])
         self.assertFalse(group['coverage_known'])
+
+
+class QuotaRanges(unittest.TestCase):
+    def select(self, source, **options):
+        return analyze_history(source, remaining_from=73, remaining_to=40, **options)
+
+    def test_exact_and_skipped_thresholds_use_recorded_endpoints(self):
+        exact = self.select(history(LARGE))
+        self.assertEqual(exact['range_candidates'][0]['status'], 'complete')
+        self.assertEqual(exact['groups'][0]['estimate']['cost'], 400)
+        source = history([snapshot(1, 100, 26), snapshot(2, 200, 28, 8, 200),
+                          snapshot(3, 300, 59, 132, 3300), snapshot(4, 400, 61, 140, 3500)])
+        result = self.select(source)
+        candidate = result['range_candidates'][0]
+        self.assertEqual((candidate['start']['remaining'], candidate['end']['remaining']), (72, 39))
+        self.assertEqual((candidate['start']['snapshot_id'], candidate['end']['snapshot_id']), (2, 4))
+        self.assertEqual(result['groups'][0]['estimate']['cost'], 400)
+
+    def test_unfinished_partial_and_missing_start(self):
+        source = history([snapshot(1, 100, 27), snapshot(2, 200, 50, 92, 2300)])
+        result = self.select(source)
+        self.assertFalse(result['estimable'])
+        self.assertEqual(result['range_candidates'][0]['status'], 'end_not_reached')
+        result = self.select(source, allow_partial=True)
+        self.assertEqual(result['range_candidates'][0]['status'], 'partial')
+        self.assertTrue(result['groups'][0]['partial_selection'])
+        self.assertEqual(result['groups'][0]['estimate']['cost'], 400)
+        source = history([snapshot(1, 100, 28), snapshot(2, 200, 61, 132, 3300)])
+        result = self.select(source, allow_partial=True)
+        self.assertFalse(result['estimable'])
+        self.assertEqual(result['range_candidates'][0]['status'], 'start_not_recorded')
+
+    def test_repeated_cycles_remain_candidates_and_never_bridge_reset(self):
+        source = history(LARGE, [snapshot(3, 500, 27), snapshot(4, 800, 60, 66, 3300)])
+        result = self.select(source)
+        self.assertEqual(len(result['groups']), 2)
+        self.assertEqual([g['estimate']['cost'] for g in result['groups']], [400, 200])
+        self.assertEqual(len(self.select(source, segment_ids=[2])['groups']), 1)
+        source = history([snapshot(1, 100, 27), snapshot(2, 200, 40, 52, 1300)],
+                         [snapshot(3, 300, 10), snapshot(4, 400, 60, 200, 5000)])
+        # First cycle is unfinished; the second has a witnessed start crossing
+        # which skips both thresholds in one observation, not a measured interval.
+        self.assertFalse(self.select(source)['estimable'])
+
+    def test_range_validation_and_no_synthetic_end(self):
+        for a, b in ((101, 40), (40, 73), (73, -1), (40, 40), (None, 40), (float('nan'), 40)):
+            with self.assertRaises(ValueError):
+                analyze_history(history(LARGE), remaining_from=a, remaining_to=b)
+        result = self.select(history([snapshot(1, 100, 20), snapshot(2, 200, 70, 200, 5000)]))
+        self.assertFalse(result['estimable'])
+        self.assertEqual(result['range_candidates'][0]['status'], 'thresholds_skipped_in_one_observation')
