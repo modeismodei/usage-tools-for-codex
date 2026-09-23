@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 Usage Tools for Codex contributors
 import fcntl,json,math,os,pathlib,signal,time,uuid
-from .common import connect,get,put,event,stamp,fingerprint,daemon_lock,ensure_run
+from .common import connect,get,put,event,stamp,fingerprint,daemon_lock,ensure_run,regular_private_path
 from .usage import index,aggregate
 from .quota import QuotaSource
 
@@ -193,6 +193,7 @@ def _daemon_loop(path,db):
         put(db,'status',{**get(db,'status',{}),'phase':'offline'});put(db,'daemon',None);db.commit()
 
 def running(path):
+    regular_private_path(path/'daemon.lock')
     if not (path/'daemon.lock').exists():return False
     with open(path/'daemon.lock','r') as f:
         try:fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB);return False

@@ -13,7 +13,7 @@ import sys
 import time
 import uuid
 
-from .common import SCHEMA_VERSION, daemon_lock, data_path
+from .common import SCHEMA_VERSION, daemon_lock, data_path, private_open, atomic_text, validate_database_files
 from .licensing import add_license_options,startup_notice
 
 COMMANDS = ('codex-limit-estimator', 'codex-usage', 'codex-quota')
@@ -48,6 +48,7 @@ def validate_payload(stage):
 
 
 def backup_database(path, suffix):
+    validate_database_files(path)
     database = path/'tracking.sqlite3'
     if not database.exists():
         return None
@@ -56,9 +57,9 @@ def backup_database(path, suffix):
         if version > SCHEMA_VERSION:
             raise ValueError(f'Database schema {version} is newer than this package supports')
         backup = path/('tracking.sqlite3.backup-upgrade-'+suffix)
+        with private_open(backup, 'xb'):pass
         with closing(sqlite3.connect(backup)) as target:
             source.backup(target)
-        backup.chmod(0o600)
     return backup
 
 
@@ -67,6 +68,9 @@ def install(source, prefix, state_dirs, config_dir, upgrade=False):
     config_dir = config_dir.expanduser().resolve()
     state_dirs = sorted({data_path(p) for p in state_dirs})
     dest, bin_dir = prefix/'lib/codex-limit-tools', prefix/'bin'
+    for directory in (dest.parent, bin_dir):
+        if directory.is_symlink() or directory.exists() and not directory.is_dir():
+            raise ValueError('Installation subdirectory must be a regular directory: '+directory.name)
     if dest.is_symlink() or dest.exists() and not dest.is_dir():
         raise ValueError('Installation path must be a regular directory')
     if dest.exists() and not upgrade:
@@ -83,12 +87,14 @@ def install(source, prefix, state_dirs, config_dir, upgrade=False):
     previous = dest.with_name(dest.name+'.backup-'+suffix)
     failed = dest.with_name(dest.name+'.failed-'+suffix)
     with ExitStack() as stack:
-        lock = stack.enter_context((dest.parent/'.codex-limit-tools.install.lock').open('a'))
+        lock = stack.enter_context(private_open(dest.parent/'.codex-limit-tools.install.lock'))
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise ValueError('Another installation is in progress') from None
         # Recheck after the installation lock in case another process just finished.
+        if dest.is_symlink() or dest.exists() and not dest.is_dir():
+            raise ValueError('Installation path must be a regular directory')
         if dest.exists() and not upgrade:
             raise ValueError('Installation already exists; use --upgrade after shutdown')
         for path in state_dirs:
@@ -126,7 +132,7 @@ def install(source, prefix, state_dirs, config_dir, upgrade=False):
                 switched.append(name)
             config_dir.mkdir(parents=True, exist_ok=True)
             try:
-                with (config_dir/'prices.json').open('x') as stream:
+                with atomic_text(config_dir/'prices.json', replace=False) as stream:
                     stream.write((dest/'prices.json').read_text())
             except FileExistsError:
                 pass

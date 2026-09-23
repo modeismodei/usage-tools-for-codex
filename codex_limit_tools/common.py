@@ -1,9 +1,59 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 Usage Tools for Codex contributors
-import fcntl,hashlib,json,os,pathlib,sqlite3,time,uuid
+import fcntl,hashlib,json,os,pathlib,sqlite3,stat,tempfile,time,uuid
 from contextlib import closing,contextmanager
 
 SCHEMA_VERSION = 2
+
+
+def regular_private_path(path):
+    """Mutable state must not alias another file or follow a special file."""
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+        raise ValueError('State file must be regular and have one link: '+path.name)
+
+
+def private_open(path, mode='ab'):
+    """Create owner-only files, refusing symlinks and hard links before writing."""
+    regular_private_path(path)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW
+    flags |= os.O_EXCL if mode in ('x', 'xb') else os.O_APPEND
+    fd = os.open(path, flags, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError('State file must be regular and have one link: '+path.name)
+        return os.fdopen(fd, mode)
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def validate_database_files(path):
+    for suffix in ('', '-wal', '-shm', '-journal'):
+        regular_private_path(path/('tracking.sqlite3'+suffix))
+
+
+@contextmanager
+def atomic_text(path, *, replace=True, newline=None):
+    """Publish a complete owner-only file without following destination links."""
+    fd, temporary = tempfile.mkstemp(prefix='.'+path.name+'.', dir=path.parent)
+    temporary = pathlib.Path(temporary)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8', newline=newline) as stream:
+            yield stream
+            stream.flush()
+            os.fsync(stream.fileno())
+        if replace:
+            os.replace(temporary, path)
+        else:
+            # Exclusive publication preserves even an existing dangling symlink.
+            os.link(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 BASE_SCHEMA = '''
 CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -21,7 +71,7 @@ CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,ts REAL,kind TEXT,detai
 def daemon_lock(path):
     """Use the same lock inode as both the original and current collector."""
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with (path / 'daemon.lock').open('a') as lock:
+    with private_open(path / 'daemon.lock') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -55,9 +105,9 @@ def _migrate(db, path):
     existing = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
     if existing:
         backup_path = path / f'tracking.sqlite3.backup-v{version}-{time.time_ns()}-{uuid.uuid4().hex[:8]}'
+        with private_open(backup_path, 'xb'):pass
         with closing(sqlite3.connect(backup_path)) as backup:
             db.backup(backup)
-        backup_path.chmod(0o600)
     # Do not use executescript: it implicitly commits pending transactions.
     db.execute('BEGIN IMMEDIATE')
     try:
@@ -76,10 +126,12 @@ def data_path(value=None):
 
 def connect(path, *, readonly=False, lock_held=False, migrate=True):
     path=pathlib.Path(path)
+    validate_database_files(path)
     if readonly:
         db=sqlite3.connect((path/'tracking.sqlite3').resolve().as_uri()+'?mode=ro',uri=True,timeout=30)
     else:
         path.mkdir(parents=True,exist_ok=True,mode=0o700)
+        with private_open(path/'tracking.sqlite3'):pass
         db=sqlite3.connect(path/'tracking.sqlite3',timeout=30)
     db.row_factory=sqlite3.Row
     try:

@@ -116,7 +116,14 @@ for line in sys.stdin:
   try:self.assertEqual(source.read()['left'],56)
   finally:source.close()
   self.assertEqual(pathlib.Path(str(fake)+'.audit').read_text().splitlines(),['initialize','initialized','account/read','account/rateLimits/read'])
-  self.log()
+  quota=subprocess.run([sys.executable,str(ROOT/'codex-quota'),'--codex-bin',str(fake),'--json'],
+                       capture_output=True,text=True,timeout=5)
+  self.assertEqual(quota.returncode,0,quota.stderr)
+  self.assertEqual(json.loads(quota.stdout)['left'],56)
+  log=self.log()
+  sentinel=self.home/'auth.json';sentinel.write_text('synthetic authentication sentinel; no credentials')
+  protected=[log,sentinel]
+  before=[(p.read_bytes(),p.stat().st_mode,p.stat().st_mtime_ns) for p in protected]
   state=self.root/'live-state'
   cmd=[sys.executable,str(ROOT/'codex-limit-estimator')]
   result=subprocess.run(cmd+['start','tracking','--background','--data-dir',str(state),'--codex-home',str(self.home),'--codex-bin',str(fake)],capture_output=True,text=True)
@@ -176,6 +183,7 @@ for line in sys.stdin:
    while running(state) and time.monotonic()<deadline:time.sleep(.05)
    live.close()
   self.assertFalse(running(state))
+  self.assertEqual([(p.read_bytes(),p.stat().st_mode,p.stat().st_mtime_ns) for p in protected],before)
 
 
 if __name__=='__main__':unittest.main()

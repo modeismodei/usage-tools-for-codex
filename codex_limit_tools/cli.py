@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 Usage Tools for Codex contributors
 import argparse,csv,json,os,pathlib,subprocess,sys,time
-from .common import connect,get,put,event,data_path,fingerprint,ensure_run,SCHEMA_VERSION,read_snapshot,stamp
+from contextlib import ExitStack
+from .common import connect,get,put,event,data_path,fingerprint,ensure_run,SCHEMA_VERSION,read_snapshot,stamp,private_open,atomic_text,daemon_lock
 from .usage import load_prices,index,aggregate,compact
 from .estimate import (report, report_history, load_history, segment_summaries, analyze_history,
                        parse_time, EXPORT_SCHEMA_VERSION)
@@ -17,14 +18,14 @@ def config_prices(path):
     return pathlib.Path(path).expanduser().resolve() if path else config if config.exists() else PACKAGE/'prices.json'
 
 def start_process(path):
-    with (path/'daemon.log').open('ab') as log:
+    with private_open(path/'daemon.log') as log:
         subprocess.Popen([sys.executable,str(PACKAGE/'codex-limit-estimator'),'_daemon','--data-dir',str(path)],
             stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
 
 def control(db,path,action):
+    if action=='resume' and not get(db,'config'):raise ValueError('Run start tracking first')
     put(db,'control',{'paused':action=='stop','shutdown':action=='shutdown'});db.commit()
     if action=='resume' and not running(path):
-        if not get(db,'config'):raise ValueError('Run start tracking first')
         start_process(path)
     print({'stop':'Pause requested; no new samples until resume.','resume':'Tracking resumed; next sample establishes a fresh baseline.','shutdown':'Daemon shutdown requested; historical data retained.'}[action])
 
@@ -72,7 +73,8 @@ def export_file(dest, data, view):
     if dest.suffix.lower() not in ('.json', '.csv'):
         raise ValueError('Export filename must end in .json or .csv')
     if dest.suffix.lower() == '.json':
-        dest.write_text(json.dumps(data, indent=2, allow_nan=False)+'\n')
+        with atomic_text(dest) as stream:
+            stream.write(json.dumps(data, indent=2, allow_nan=False)+'\n')
         return
     if view == 'daily':
         rows, fields = data['daily'], DAILY_CSV_FIELDS
@@ -83,7 +85,7 @@ def export_file(dest, data, view):
             fields += ['quality', 'selection', 'range_candidates'] if view == 'analysis' else ['id']
             if view == 'analysis':
                 rows = [{k: data[k] for k in fields}]
-    with dest.open('w', newline='') as stream:
+    with atomic_text(dest, newline='') as stream:
         writer = csv.DictWriter(stream, fieldnames=fields, extrasaction='ignore')
         writer.writeheader()
         for row in rows:
@@ -136,6 +138,8 @@ def estimator(argv=None):
         p.error('interval >=30, resolution/min-points in (0,100] required')
     if (a.target or a.file) and a.action not in ('start', 'prices'):
         p.error('Unexpected positional arguments')
+    if a.action == 'start' and (a.target != 'tracking' or a.file):
+        p.error('Use start tracking')
     if (a.run or a.segments or a.from_time or a.to_time) and a.action not in ('segments','analyze','export'):
         p.error('History selectors require segments, analyze or export')
     if a.view and a.action != 'export':
@@ -175,18 +179,31 @@ def estimator(argv=None):
             prices = load_prices(a.file)
             dest = pathlib.Path(os.environ.get('XDG_CONFIG_HOME', str(pathlib.Path.home()/'.config')))/'codex-limit-tools/prices.json'
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(json.dumps(prices, indent=2)+'\n')
+            with atomic_text(dest) as stream:
+                stream.write(json.dumps(prices, indent=2)+'\n')
             print(f'Imported {dest}. Active tracking keeps its frozen snapshot.');return
         p.error('Use prices path | prices validate [FILE] | prices import FILE')
     if a.action == '_daemon':
         daemon(path);return
-    read_only = a.action in ('runs','segments','analyze','status','report','export')
+    read_only = (a.action in ('runs','segments','analyze','status','report','export')
+                 or a.action == 'checkpoint' and bool(a.request_id)
+                 or a.action == 'ui' and not sys.stdin.isatty())
     if (read_only or a.action in ('ui','stop','resume','shutdown','checkpoint')) and not (path/'tracking.sqlite3').exists():
         raise ValueError('No tracking history; start tracking or choose an existing --data-dir')
+    pending_prices = None
+    if a.action in ('start', 'resume'):
+        config = None
+        if (path/'tracking.sqlite3').exists():
+            probe = connect(path, readonly=True)
+            try:config = get(probe, 'config')
+            finally:probe.close()
+        if a.action == 'resume' and not config:
+            raise ValueError('Run start tracking first')
+        if a.action == 'start' and (config is None or a.new_run):
+            pending_prices = load_prices(config_prices(a.prices))
     db = connect(path, readonly=read_only, migrate=a.action in ('start','resume','migrate'))
     try:
         if a.action == 'start':
-            if a.target != 'tracking' or a.file:p.error('Use start tracking')
             if running(path):
                 if a.new_run:p.error('Shutdown the existing daemon before --new-run')
                 print('Tracking daemon already exists; attaching without resetting its baseline.')
@@ -194,7 +211,7 @@ def estimator(argv=None):
                 c = get(db, 'config')
                 if c is None or a.new_run:
                     c = {'codex_home':str(pathlib.Path(a.codex_home).expanduser().resolve()),
-                         'codex_bin':a.codex_bin, 'bucket':a.bucket, 'prices':load_prices(config_prices(a.prices)),
+                         'codex_bin':a.codex_bin, 'bucket':a.bucket, 'prices':pending_prices,
                          'interval':a.interval, 'resolution':a.resolution, 'min_points':a.min_points,
                          'label':a.label if a.label is not None else 'single-device', 'started_at':time.time()}
                 c = ensure_run(db, c)
@@ -220,7 +237,7 @@ def estimator(argv=None):
                 if row['error']:print('Error: '+row['error'])
         elif read_only:
             with read_snapshot(db):
-                if a.action in ('status','report'):
+                if a.action in ('status','report','ui'):
                     data = report(db)
                     data['status'] = get(db, 'status', {})
                     data['daemon_running'] = running(path)
@@ -283,15 +300,21 @@ def usage(argv=None):
     p.add_argument('--data-dir');p.add_argument('--prices');p.add_argument('--json',action='store_true')
     a=p.parse_args(argv)
     if not a.json:startup_notice()
-    path=data_path(a.data_dir);db=connect(path)
+    prices=load_prices(config_prices(a.prices))
+    path=data_path(a.data_dir)
+    active=running(path)
+    locks=ExitStack()
     try:
-        if running(path):
+        if not active:locks.enter_context(daemon_lock(path))
+        db=connect(path,readonly=active,lock_held=not active)
+        locks.callback(db.close)
+        if active:
             expected=get(db,'indexed_codex_home') or get(db,'config',{}).get('codex_home')
             if expected and expected!=str(pathlib.Path(a.codex_home).expanduser().resolve()):
                 raise ValueError('Active tracker uses another CODEX_HOME; choose a separate --data-dir')
             stats=get(db,'last_index',{});note='Using tracker index as of its latest sample.'
         else:stats=index(db,a.codex_home);note='Local index refreshed.'
-        prices=load_prices(config_prices(a.prices));m=aggregate(db,prices)
+        m=aggregate(db,prices)
         if a.json:print(json.dumps({'totals':m,'diagnostics':stats,'prices':prices['name'],'note':note},indent=2));return
         print(f"Sessions indexed: {db.execute('SELECT COUNT(*) FROM files').fetchone()[0]}\n{note}\n")
         for label,key in [('Input total','input'),('  non-cached','noncached'),('  cached','cached'),('Output','output'),('Reasoning (inside output)','reasoning')]:print(f'{label:<28}{m[key]:>18,}')
@@ -300,7 +323,7 @@ def usage(argv=None):
         for name,v in sorted(m['models'].items(),key=lambda x:-x[1]['tokens']):print(f"{name[:27]:<28}{compact(v['tokens']):>12}{v['cost']:>14,.2f}")
         print('\nPrices: '+prices['name']+' (reference equivalent; not an invoice)')
         print('Diagnostics: '+json.dumps(stats))
-    finally:db.close()
+    finally:locks.close()
 
 def quota(argv=None):
     p=argparse.ArgumentParser(description='Read account quota without a model turn. Does not control existing watchers.')

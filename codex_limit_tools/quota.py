@@ -25,6 +25,8 @@ class RPC:
         self.p.stdout.close()
 
     def send(self, msg):
+        if 'method' in msg and msg['method'] not in ('initialize', 'initialized', 'account/read', 'account/rateLimits/read'):
+            raise MonitorError('RPC method not allowed')
         data = (json.dumps(msg) + '\n').encode()
         self.p.stdin.write(data)
 
