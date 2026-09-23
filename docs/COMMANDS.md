@@ -1,104 +1,146 @@
-# Command reference and examples
+# Command reference
 
-All commands accept `--help`. History/control commands accept `--data-dir DIR`;
-use it consistently when you maintain more than one tracker. Examples use
-placeholder IDs from `runs`, `segments` and checkpoint output. JSON output is
-machine-readable; descriptions and progress are omitted from JSON stdout.
-All three commands and `install.sh` also accept `--license` to show GPLv3 terms
-without side effects and `--version` to show the version and license. Human
-startup notices go to stderr; JSON mode suppresses them. The TUI shows the notice.
+For installation, see the [README](../README.md). For an explanation of runs,
+segments, prices, and estimates, see the [user guide](USAGE.md).
 
-| Command | Behavior |
+All commands accept `--help`, `--version`, and `--license`. JSON output keeps
+stdout machine-readable, without progress messages or startup notices.
+History and control commands accept `--data-dir DIR`; use the same directory
+consistently when managing a tracker.
+
+## Usage and quota reports
+
+| Command | Description |
 | --- | --- |
-| `codex-usage [--json] [--prices FILE]` | Independent local token report; refreshes the log index when the collector is offline |
-| `codex-quota [--json]` | Independent read-only account request; requires authenticated Codex |
-| `codex-limit-estimator` or `ui` | Attach the terminal interface; `q` detaches |
-| `start tracking [--background]` | Start the observer, or attach to an existing one |
-| `start tracking --new-run --label TEXT [--prices FILE]` | Create a separate UUID and frozen prices after shutdown |
-| `stop`, `resume`, `shutdown` | Pause, resume/restart, or shut down the observer |
-| `status`, `report [--json]` | Existing offline status and segment/daily summaries |
-| `prices path`, `prices validate [FILE]`, `prices import FILE` | Locate, validate or import external prices |
-| `runs [--json] [--label TEXT]` **new** | Inventory configured runs plus a legacy/unknown entry |
-| `segments [FILTERS] [--json]` **new** | Segment IDs, run IDs and actual quota/snapshot endpoints |
-| `analyze [FILTERS] [--group-by run\|day\|overall] [--json]` **new** | Compatible interval aggregates and coverage |
-| `checkpoint [--wait] [--timeout SECONDS] [--json]` **new** | One immediate sample by the existing daemon, with acknowledgement |
-| `checkpoint --request-id ID [--wait] [--json]` **new** | Inspect an existing request without sampling again |
-| `migrate` **new** | Back up and migrate history while collection is shut down |
-| `export --output FILE.csv\|FILE.json` | Existing default daily CSV or segment/daily JSON export |
-| `export --view segments\|snapshots\|analysis [FILTERS] --output FILE.csv\|FILE.json` **new** | Raw or analyzed history exports |
+| `codex-usage [--json] [--prices FILE]` | Report local tokens and reference cost. Refresh the index when the collector is offline; otherwise read the latest saved index. |
+| `codex-quota [--json]` | Retrieve account quota through the authenticated Codex CLI. |
 
-Filters are `--run UUID` (repeatable), `--segments 12,13,14` (repeatable),
-`--label TEXT`, `--from TIME`, and `--to TIME`. All intersect; repeated IDs count
-once. A timestamp requires an explicit timezone. A date-only start selects from
-UTC midnight; a date-only end includes that UTC date, ending at the following
-midnight. Observations obey `[start, end)`; effective endpoints and uncovered
-edges are reported. Unknown IDs and invalid combinations exit nonzero.
+## Tracking and history
 
-Analysis additionally accepts paired `--snapshot-from ID --snapshot-to ID`
+The commands below follow `codex-limit-estimator`. Running it with no subcommand
+opens the terminal interface; it does not start a collector.
+
+| Subcommand | Description |
+| --- | --- |
+| `ui` | Open the terminal interface. |
+| `start tracking [--background]` | Start tracking, or attach to an existing tracker without replacing its configuration. |
+| `start tracking --new-run --label TEXT [--prices FILE]` | Create a separate run with its own ID and frozen prices, after shutting down the collector. |
+| `stop` | Pause collection; leave the background process available. |
+| `resume` | Resume a paused tracker, or restart a configured tracker after shutdown or reboot. |
+| `shutdown` | End the background process without deleting history. |
+| `status` | Show saved tracker status and whether the daemon is running. |
+| `report [--json]` | Show saved segment and daily summaries. |
+| `runs [--json] [--label TEXT]` | List configured runs, including a legacy/unknown entry where applicable. |
+| `segments [FILTERS] [--json]` | List segment IDs, run IDs, and recorded quota/snapshot endpoints. |
+| `analyze [FILTERS] [--group-by run\|day\|overall] [--json]` | Aggregate compatible observations and report their coverage. |
+| `checkpoint [--wait] [--timeout SECONDS] [--json]` | Ask an existing, unpaused daemon for one immediate sample. |
+| `checkpoint --request-id ID [--wait] [--json]` | Inspect a checkpoint request without requesting another sample. |
+| `migrate` | Back up and migrate history while the collector is shut down. |
+| `export --output FILE.csv\|FILE.json` | Export daily CSV or segment/daily JSON. |
+| `export --view segments\|snapshots\|analysis [FILTERS] --output FILE.csv\|FILE.json` | Export raw history or analyzed observations. |
+| `prices path` | Locate the editable price file. |
+| `prices validate [FILE]` | Validate the selected price JSON. |
+| `prices import FILE` | Validate and import an external price file without repricing saved runs. |
+
+`status`, `report`, `runs`, `segments`, `analyze`, and `export` work offline on
+existing history. They do not start collection, request quota, or migrate the
+database. Export replaces the explicitly named output file; choose its path
+accordingly. See [data and side effects](SIDE-EFFECTS.md) for filesystem details.
+
+A checkpoint needs a running, unpaused collector. Its timeout defaults to
+90 seconds and can be set to a positive value up to 300 seconds. It does not
+eliminate provider reporting lag or guarantee final accounting.
+
+## Terminal controls
+
+| Key | Action |
+| --- | --- |
+| `q` / Escape | Close the interface; leave tracking running. |
+| `s` | Pause collection. |
+| `r` | Resume a paused live daemon with a fresh baseline. |
+| `v` | Cycle segment, current-run aggregate, and daily views. |
+| `h` | Toggle daily history. |
+| `[` / `]` | Select compatibility groups in the run view. |
+
+Navigation renders saved observations without requesting quota or changing the
+sampling interval. To restart an offline daemon, use the CLI `resume` command.
+
+## Filters and grouping
+
+History selections accept `--run UUID` (repeatable), `--segments 12,13,14`
+(repeatable), `--label TEXT`, `--from TIME`, and `--to TIME`. Filters intersect;
+repeated IDs count once. Unknown IDs and invalid combinations return an error.
+
+Timestamps require an explicit timezone. A date-only start means UTC midnight;
+a date-only end includes that whole UTC date, ending at the following midnight.
+Time selection uses `[start, end)`. Results report the actual observed endpoints
+and any uncovered edges rather than interpolating observations.
+
+Analysis also accepts either paired `--snapshot-from ID --snapshot-to ID`
 (inclusive), or `--remaining-from PERCENT --remaining-to PERCENT` with optional
-`--allow-partial`. Grouping/range/snapshot options also work with
-`export --view analysis`. Use `--across-runs` with `--group-by overall` or `day`
-to explicitly combine compatible runs; labels, prices and account meters still
-partition the result. A workload label alone does not establish comparable mix.
+`--allow-partial`. These options, along with grouping, also work with
+`export --view analysis`.
 
-## Worked selections
+Use `--across-runs` with `--group-by overall` or `day` to combine compatible runs
+explicitly. Prices, labels, and account meters still partition the result.
+A common workload label does not establish a comparable model or cache mix.
+
+## Examples
+
+Replace `RUN_ID`, `SEGMENT_ID`, and snapshot IDs with values returned by the tools.
 
 ```bash
-# Find a run and the current/latest segment ID without starting a collector.
+# Find runs and their segments.
 codex-limit-estimator runs
 codex-limit-estimator segments --run RUN_ID
 
-# Current segment, full run, and selected segments.
+# Analyze one segment, an entire run, or selected segments.
 codex-limit-estimator analyze --segments SEGMENT_ID
 codex-limit-estimator analyze --run RUN_ID
 codex-limit-estimator analyze --segments 12,13,14 --group-by overall
 
-# Multiple UTC days, reported as daily groups or as a compatible run total.
+# Compare UTC days or report the selected period as a compatible run total.
 codex-limit-estimator analyze --run RUN_ID --from 2026-09-23 --to 2026-09-30 --group-by day --json
 codex-limit-estimator analyze --run RUN_ID --from 2026-09-23 --to 2026-09-30 --group-by overall
 
-# Observed quota range; multiple cycles return separate candidates.
+# Select an observed quota range.
 codex-limit-estimator analyze --run RUN_ID --remaining-from 73 --remaining-to 40
 codex-limit-estimator analyze --segments SEGMENT_ID --remaining-from 73 --remaining-to 40 --allow-partial
 
-# Explicit across-run comparison still separates prices, labels and meters.
-codex-limit-estimator analyze --label "Astra Ultra / VM only" --group-by overall --across-runs
+# Combine compatible runs with the same workload label.
+codex-limit-estimator analyze --label "single-model comparison" --group-by overall --across-runs
 
-# Offline legacy history; original run boundaries cannot be reconstructed.
+# Read legacy history without migrating it.
 codex-limit-estimator analyze --data-dir /path/to/archived-state --run legacy
 
-# Reproducible exports.
+# Export raw records or analyzed results.
 codex-limit-estimator export --view segments --output segments.csv
 codex-limit-estimator export --view snapshots --output snapshots.csv
 codex-limit-estimator export --view analysis --run RUN_ID --output analysis.json
 ```
 
-For 73% to 40% remaining, consumption is 33 percentage points. With $132 and
-3,300 input tokens matched to those endpoints, the equivalent is $400 and 10,000
-input tokens per 100 points. For two compatible segments of 1 point/$10 and
-9 points/$18, the combined equivalent is $280, not the unweighted $600 average.
-Cached input and reasoning output remain subsets of their totals.
+A change from 73% to 40% remaining is 33 consumed quota points. With $132 and
+3,300 input tokens matched to those endpoints, the equivalents are $400 and
+10,000 input tokens per 100 points. Aggregates use summed usage divided by summed
+quota consumption: 1 point/$10 plus 9 points/$18 gives $280, not an unweighted
+average of $600. Cached input and reasoning output remain subsets of their totals.
 
-Thresholds select actual observations: a step from 41% to 39% ends at 39%.
-Missing starts and unfinished ranges have explicit statuses. Partial selection
-cannot invent a missing start. Use [manual checkpoints](ANALYSIS.md#manual-checkpoints)
-to record precise baseline/final snapshot IDs around your independently run work.
-Checkpoint timeout defaults to 90 seconds and accepts up to 300 seconds. A
-checkpoint cannot eliminate provider reporting lag or guarantee final accounting.
+Quota thresholds select actual observations: a step from 41% to 39% ends at 39%,
+not an invented 40%. Candidates from different cycles stay separate. An unfinished
+range can be reported with `--allow-partial`, but an unrecorded start cannot be
+recovered. See [manual checkpoints](ANALYSIS.md#manual-checkpoints) for recording
+baseline and final snapshot IDs around a workload, and [ANALYSIS.md](ANALYSIS.md)
+for complete selection and export rules.
 
-## Existing history and new observations
+## Older history
 
-All offline analysis commands can read the original schema without migration.
-Old segments, snapshots, reference costs and daily export columns remain usable.
-Unknown original runs are labeled `legacy/unknown`; they are separated by segment
-unless across-run aggregation is explicit. Missing observations across old
-midnight boundaries, resets, pauses and errors cannot be recovered.
+Offline analysis can read the original schema without migration. Original
+segments, snapshots, reference costs, and daily export columns remain usable.
+Unknown run membership is shown as `legacy/unknown`; those segments stay separate
+unless aggregation across runs is explicit. Missing observations across old
+midnight boundaries, pauses, resets, or errors cannot be recovered.
 
-Persistent run UUIDs, uninterrupted midnight collection and checkpoints apply to
-new observations made by the updated collector. Migration preserves original
-segment IDs and data rather than fabricating membership or new snapshots. Run
-the [upgrade procedure](UPGRADING.md) before restarting collection.
-
-The TUI cycles segment/run/daily views with `v`. `h` toggles daily history; `[` and
-`]` select run compatibility groups. `q`, `s` and `r` retain detach/pause/resume.
-All views render saved observations; navigation causes no account requests.
+Run IDs and checkpoint records apply to observations collected with versions that
+support them. Migration preserves old segment IDs and data; it does not invent
+run membership or snapshots. Follow the [upgrade guide](UPGRADING.md) before
+restarting collection with an updated installation.

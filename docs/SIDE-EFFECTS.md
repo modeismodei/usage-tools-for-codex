@@ -1,8 +1,14 @@
-# Side-effect boundaries
+# Data and side effects
 
-The tools observe local usage and account quota. They do not send prompts,
-start model turns, enqueue messages, or inject quota heartbeats. The following
-is the intended boundary for trusted source code and user-controlled directories.
+The tools read local usage logs and retrieve account quota through Codex. They
+do not submit prompts or start model workloads. This reference describes the
+files, database changes, processes, and network access associated with each
+command. It assumes trusted source code and user-controlled directories.
+
+For a shorter overview, see [data, privacy, and compatibility](USAGE.md#data-privacy-and-compatibility)
+in the user guide.
+
+## Files and directories
 
 Paths below mean their resolved locations, including explicitly selected parent
 directory links:
@@ -21,6 +27,8 @@ All commands read their Python package and normal interpreter/OS resources
 (libraries, locale, terminal descriptions and local name-service configuration).
 They write normal output/errors to the caller's streams. Entry points suppress
 package bytecode creation. No command downloads dependencies or installs a service.
+
+## Command reference
 
 | Operation | Additional allowed reads | Allowed writes and database changes | Subprocesses / network |
 | --- | --- | --- | --- |
@@ -45,6 +53,8 @@ package bytecode creation. No command downloads dependencies or installs a servi
 | `migrate` | Existing history/schema | Acquire daemon lock; back up existing DB; transactional schema upgrade and WAL initialization; may initialize an empty state directory | None. |
 | `_daemon` (internal collector) | Saved run configuration, logs, history, quota responses | Hold state lock; incremental index writes; append segments/snapshots/events; update status, daemon metadata and checkpoints; append errors to daemon log. Pause/errors/reset/gaps end continuity. | Owns one read-only stdio RPC child at a time; closes/reopens on failure/resume and terminates it on shutdown. |
 
+## Database reads and migrations
+
 “Logical read-only” does not mean zero filesystem activity: SQLite can create or
 update `-wal`/`-shm` coordination files while reading WAL history. Readers use
 `mode=ro` and `query_only`, retaining committed WAL data rather than opening an
@@ -56,6 +66,8 @@ requests. Existing rows and frozen prices are retained. `user_version` and DDL
 commit together; failures roll back and retain the pre-migration SQLite backup.
 Newer unsupported schemas are refused. No migration or installer deletes history.
 
+## Permissions and filesystem limits
+
 New state files/backups/logs and atomic exports/prices use owner-only permissions.
 Existing permissions are not silently changed. Mutable DB/sidecar/lock/log files
 must be regular files with one link; aliased state is refused. Atomic output
@@ -63,12 +75,16 @@ replacement replaces a destination symlink/hard link without modifying its targe
 Installation refuses symlinked internal `lib`/`bin` directories. These checks are
 not a security sandbox against another process changing directory entries mid-operation.
 
+## Codex requests and external effects
+
 The only outgoing RPC methods are `initialize`, `initialized`, `account/read`
 with `refreshToken: false`, and `account/rateLimits/read`. Server-initiated requests
 receive an error response, never approval or model work. The selected external
 Codex executable inherits its environment, can read authentication/configuration,
 write its own logs/cache/state, and contact provider services. Those external
 side effects depend on that executable and were **not verified with a live account**.
+
+## Private data
 
 Runtime history, daemon errors and exports can contain paths, labels, response
 identifiers, timestamps, model metadata and account-derived hashes. Treat them as

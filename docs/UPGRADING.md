@@ -1,80 +1,126 @@
-# Safe installation upgrades
+# Upgrading
 
-Run these commands yourself when ready. Development and verification use only
-temporary installations; they do not upgrade your permanent installation.
+An upgrade replaces the installed tools; migration updates the saved-history
+format. These are separate steps. Stop every collector using the installation
+before either step, and check the saved history before resuming.
 
-1. If your installed version supports checkpoints and tracking is active, run
-   `codex-limit-estimator checkpoint --wait` and retain its snapshot ID. Skip
-   this step for the original version or a paused/offline collector.
-2. Run `codex-limit-estimator shutdown`, then `codex-limit-estimator status`.
-   Wait until it says `Daemon: offline`. A sample already in progress may take
-   time to finish. Repeat this for every collector using this installation.
-3. From the updated source bundle, run:
+## Upgrade an existing installation
 
-   ```bash
-   bash install.sh --upgrade
-   # --update is an alias for --upgrade.
-   ```
+### 1. Record the current state and stop collection
 
-   For a custom installation or state directory, specify the same paths used
-   before. Repeat `--data-dir` for every tracking directory using the package:
+Keep a copy of your current report for comparison after the upgrade. Reports and
+exports can contain private metadata, so store them outside the repository.
 
-   ```bash
-   bash install.sh --upgrade --prefix /path/to/prefix \
-     --data-dir /path/to/state --data-dir /path/to/another-state
-   ```
+If your installed version supports checkpoints and collection is active, you can
+record a final observation first:
 
-4. Refresh the shell command cache (`rehash` in Zsh or `hash -r` in Bash), then
-   migrate the history explicitly and verify it before restarting:
+```bash
+codex-limit-estimator checkpoint --wait
+```
 
-   ```bash
-   codex-limit-estimator migrate
-   codex-limit-estimator runs
-   codex-limit-estimator report --json
-   codex-limit-estimator resume
-   codex-limit-estimator status
-   ```
+Keep the returned snapshot ID. Skip this step for an older version without
+checkpoints, or when the collector is paused or offline.
 
-   Add the same `--data-dir` to each command for custom tracking directories.
-   Repeat migration and verification for each such directory. Compare historical
-   segment IDs, counts and estimates with your pre-upgrade report. After resume,
-   the next successful sample establishes a fresh segment baseline in the same
-   configured run; it does not bridge the shutdown gap.
+Shut down the collector and check its status:
 
-The upgrade script stages an explicit distribution manifest and validates all
-three entry points and the bundled prices before switching. It takes the same
-daemon lock used by the original collector, so an active collector blocks the
-upgrade. The script cannot discover arbitrary custom state directories: supply
-all of them with `--data-dir`. It never shuts down or starts a collector itself.
+```bash
+codex-limit-estimator shutdown
+codex-limit-estimator status
+```
 
-For every supplied existing database it makes a SQLite backup, including
-committed WAL data, named `tracking.sqlite3.backup-upgrade-...`. The database
-schema remains unchanged during installation. The subsequent migration creates
-its own `tracking.sqlite3.backup-v...` backup and changes the schema in a
-transaction. Unsupported newer schemas are refused. Original schema 0 and
-intermediate schema 1 are supported; the current schema is 2.
+Wait for `Daemon: offline`; an in-progress scan or quota request may take time
+to finish. For custom tracking directories, add `--data-dir /path/to/state` to
+both commands. Repeat for every collector that uses this installation.
 
-The previous package is retained beside the new one as
-`codex-limit-tools.backup-...`; existing command files/links are also backed up.
-On a command-switch failure, the installer restores the previous package and
-commands, retaining the failed package for inspection. Command-link backups
-preserve their original targets; use the preserved package directory itself to
-inspect the previous version. A plain install still refuses an existing package
-unless `--upgrade`/`--update` was supplied.
+### 2. Install the updated source
 
-External `prices.json` is preserved byte for byte when it exists. Frozen run
-prices and all history remain intact. The independent quota watcher and its
-state are untouched. Old installations, backups and failed staging directories
-are never cleaned up automatically.
+Update your checkout or extract a fresh source archive, then run from its root:
 
-If you need to return to the old version, first shut down collection. Preserve
-the current installation and database, then restore the matching old package
-and pre-migration database backup as a pair. Do not run an older collector
-against a newer schema or copy just the main file of a live WAL database. Keep
-all backup generations until you have verified your chosen version and history.
+```bash
+bash install.sh --upgrade
+```
 
-For an isolated trial, use a temporary prefix **and** a temporary config/state
-location; changing `--prefix` alone does not isolate external prices or history:
+`--update` is an alias for `--upgrade`. For a custom installation prefix or state
+directory, supply the same paths used before. Repeat `--data-dir` for every
+tracking directory using this package:
+
+```bash
+bash install.sh --upgrade --prefix /path/to/prefix \
+  --data-dir /path/to/state --data-dir /path/to/another-state
+```
+
+The installer cannot discover arbitrary custom state directories. Supplying all
+of them allows it to check their locks and back up their databases. It does not
+shut down or start collectors, migrate history, or make account requests.
+
+### 3. Migrate and inspect the history
+
+Open a new terminal, or refresh your shell's command cache with `rehash` in Zsh
+or `hash -r` in Bash. Then run:
+
+```bash
+codex-limit-estimator migrate
+codex-limit-estimator runs
+codex-limit-estimator report --json
+```
+
+Add the same `--data-dir` to each command for custom tracking directories, and
+repeat for each directory. Compare segment IDs, counts, and estimates with the
+pre-upgrade report before continuing.
+
+### 4. Resume collection
+
+```bash
+codex-limit-estimator resume
+codex-limit-estimator status
+```
+
+Use the matching `--data-dir` where needed. The next successful sample starts
+a fresh segment in the same configured run, preserving its frozen prices.
+The shutdown gap is not included in the estimate.
+
+## What is backed up and preserved
+
+The installer stages the package from an explicit distribution manifest and
+validates the three entry points and bundled prices before switching. It uses
+the collector's daemon lock; an active collector blocks the upgrade. A plain
+installation refuses an existing package unless `--upgrade` or `--update` is
+supplied.
+
+The previous package is retained as `codex-limit-tools.backup-...`, alongside
+backups of existing command files or links. On a handled command-switch failure,
+the installer restores the previous package and commands, retaining the failed
+package for inspection. Command-link backups preserve their original targets;
+use the preserved package directory itself to inspect the old version.
+
+Each supplied existing database receives a SQLite backup named
+`tracking.sqlite3.backup-upgrade-...`, including committed WAL data. Installation
+does not change the database schema. Migration makes its own
+`tracking.sqlite3.backup-v...` backup, then updates the schema in a transaction.
+Schema versions 0 and 1 can migrate to the current version, 2; unsupported newer
+schemas are refused. Migration failures roll back and retain the backup.
+
+Existing external `prices.json` files are preserved byte for byte. Frozen run
+prices and historical observations remain intact. The separate quota watcher
+and its state are not modified. Old installations, backups, and failed staging
+directories are not cleaned up automatically.
+
+## Rolling back
+
+Shut down collection first. Preserve the current installation and database, then
+restore the matching old package and pre-migration database backup **as a pair**.
+Do not run an older collector against a newer schema, or copy only the main file
+of a live WAL database. Keep backup generations until the chosen version and
+its history have been checked.
+
+Automatic rollback covers handled command-switch failures, not every possible
+interruption. An abrupt termination or power loss during installation may
+require manual recovery from the retained backups.
+
+## Trying an installation separately
+
+Use a temporary prefix **and** temporary configuration and state locations.
+Changing `--prefix` alone does not isolate the external price file or history.
 
 ```bash
 trial_dir=$(mktemp -d)
@@ -84,7 +130,6 @@ XDG_CONFIG_HOME="$trial_dir/config" XDG_STATE_HOME="$trial_dir/state" \
   bash install.sh --upgrade --prefix "$trial_dir/prefix"
 ```
 
-These install commands perform no account requests. The automated tests exercise
-fresh installation, upgrades from synthetic original history, price preservation,
-lock refusal, invalid payloads, command-switch rollback and migration, entirely
-under temporary directories.
+These commands install and upgrade the tools without contacting an account or
+starting collection. Keep the same isolated environment if you later run the
+trial installation.

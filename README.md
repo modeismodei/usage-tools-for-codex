@@ -1,364 +1,111 @@
 # Usage Tools for Codex
 
-`usage-tools-for-codex` is an independent community project, not affiliated with
-or endorsed by OpenAI.
+Terminal tools for monitoring local Codex token usage and account quota, with a
+live dashboard, saved history, and CSV/JSON exports. The estimator compares usage
+with quota consumption to estimate the token volume and API-equivalent cost per
+100% of weekly quota.
 
-A project-independent, non-agentic bundle for measuring local token activity per
-percentage point of account quota. Bash is needed only for installation; runtime
-uses Python 3.10+ standard libraries, SQLite, curses, and your authenticated Codex
-CLI. No pip dependencies, API key, extra model session, prompt injection, or
-quota heartbeat messages are used.
+**In development. Linux is the currently supported platform.**
 
-The command names remain `codex-usage`, `codex-quota`, and
-`codex-limit-estimator`. The internal Python package `codex_limit_tools`,
-installation directory `codex-limit-tools`, and existing configuration and state
-paths retain their original names for compatibility.
+An independent community project, not affiliated with or endorsed by OpenAI.
 
-## License
+![Codex Limit Estimator showing token usage, model mix, and a quota-based estimate](codex-limit-estimator.png)
 
-This project is licensed under the **GNU General Public License, version 3**
-(`GPL-3.0-only`). See the supplied [LICENSE](LICENSE) and project [NOTICE](NOTICE).
-It is free software, with no warranty. Source files carry SPDX identifiers;
-installation and upgrade include both license documents.
+## Installation
 
-Human-readable command startup and the TUI display a short license notice.
-Run any command with `--license` for the full terms or `--version` for the
-version and license identifier. These options work offline without reading logs,
-creating tracking state or contacting Codex. Startup notices use stderr and
-are suppressed in JSON mode, preserving machine-readable stdout.
+Requires **Python 3.10+** (including SQLite and curses), **Bash**, and an installed,
+authenticated **Codex CLI** on your `PATH`. No additional Python packages or API
+key are needed.
 
-## Install and start
-
-Extract the ZIP and run from its extracted directory:
+Clone or download this repository, then run from its root directory:
 
 ```bash
 bash install.sh
 ```
 
-The installer creates commands under `~/.local/bin`, backs up existing commands
-with matching names, and installs the shared package under
-`~/.local/lib/codex-limit-tools`. It installs an editable price file under
-`${XDG_CONFIG_HOME:-~/.config}/codex-limit-tools/prices.json` if none exists.
-It NEVER replaces or modifies `watch-codex-quota` or an existing quota state file.
-To update an existing package after shutting down its collector, use
-`bash install.sh --upgrade` (`--update` is an alias). It preserves the previous
-installation and external prices and backs up supplied state directories without
-starting collection or migrating them. Follow the [safe upgrade sequence](docs/UPGRADING.md).
-
-Make sure `~/.local/bin` is on PATH. If your shell cached the old command, open a
-new terminal or run `rehash` in Zsh / `hash -r` in Bash.
-
-First verify the two independent inputs, without an agent:
+Commands are installed in `~/.local/bin`; make sure it is on your `PATH`.
+Check local usage and account quota:
 
 ```bash
 codex-usage
 codex-quota
 ```
 
-The first log scan can take time for a large history; later scans are incremental.
-Then start collection and enter the TUI:
+The first usage scan may take a while if you have a large session history.
+
+## Usage
+
+Start tracking and open the terminal interface:
 
 ```bash
 codex-limit-estimator start tracking
 ```
 
-A detached background process starts automatically. You do NOT need a separate
-terminal, the v2 watcher, a manually created JSON state, or an agent to start it.
-Collection defaults to every 300 seconds (five minutes). The TUI refreshes local
-state more often without making account requests. Existing history provides
-index context; only matched differences after the first new baseline contribute
-to the live estimate. An estimate requires actual quota consumption.
-
-| Key | Action |
-| --- | --- |
-| `q` / Escape | Exit TUI; leave tracking running |
-| `s` | Stop/pause collecting; leave the background process available |
-| `r` | Resume a paused live daemon with a fresh baseline |
-| `h` | Toggle daily history |
-| `v` | Cycle segment, current run aggregate, and daily views |
-| `[` / `]` | Select separate compatibility groups in the run view |
-
-Reattach at any time:
+The tracker runs in the background and samples every five minutes by default.
+Estimates become available after new usage and quota consumption are observed.
+Press `q` to close the interface **without stopping tracking**, `s` to pause, or
+`r` to resume. Press `v` to switch between segment, run, and daily views.
 
 ```bash
-codex-limit-estimator
+codex-limit-estimator           # Reopen the interface
+codex-limit-estimator status    # Check tracker status
+codex-limit-estimator shutdown  # Stop the background process
 ```
 
-Other commands:
+History is kept locally. To restart tracking after a shutdown or reboot, use
+`codex-limit-estimator resume`. No automatic startup service is installed.
+
+## Updating
+
+These steps use default paths. For custom paths or multiple trackers, follow
+the [upgrade guide](docs/UPGRADING.md).
+
+Stop the collector before updating:
 
 ```bash
-codex-limit-estimator start tracking --background
-codex-limit-estimator status
-codex-limit-estimator report
-codex-limit-estimator stop
-codex-limit-estimator resume
 codex-limit-estimator shutdown
-codex-limit-estimator export --output estimates.csv
-codex-limit-estimator export --output estimates.json
+codex-limit-estimator status
 ```
 
-`shutdown` ends the background process. Disk history remains. `resume` can restart
-it after shutdown/reboot; its first sample is a new baseline. Pauses and shutdowns
-may wait for an in-progress log scan/account request to finish; they do not kill
-other Codex processes. Reboot startup is not automatically installed.
-Starting an already-running tracker attaches without replacing its configuration.
-If it is paused, press `r` or run `resume`.
-
-## Offline history analysis
-
-New `runs`, `segments`, and `analyze` commands select saved observations without
-starting a collector or contacting Codex. Export raw snapshots or analysis with
-`export --view snapshots|segments|analysis`. `checkpoint --wait` requests a bounded
-immediate sample from an existing unpaused daemon; it returns an observed snapshot
-ID. Use paired `--snapshot-from`/`--snapshot-to` IDs for a reproducible selection.
+Wait until status shows `Daemon: offline`. Update your checkout or download a
+fresh source archive, then run from its root directory:
 
 ```bash
+bash install.sh --upgrade
+```
+
+Open a new terminal, then migrate and inspect your saved history:
+
+```bash
+codex-limit-estimator migrate
 codex-limit-estimator runs
-codex-limit-estimator segments --run RUN_ID
-codex-limit-estimator analyze --run RUN_ID --remaining-from 73 --remaining-to 40
-codex-limit-estimator analyze --run RUN_ID --group-by day --json
+codex-limit-estimator report
 ```
 
-See the [command reference and worked examples](docs/COMMANDS.md),
-[analysis and export contract](docs/ANALYSIS.md), and
-[installation upgrade instructions](docs/UPGRADING.md). Default sampling remains
-five minutes. Results report observed quota points, coverage, exclusions and
-conditional rounding bounds; they do not establish an official allowance.
+After checking the history, restart tracking with `codex-limit-estimator resume`.
+The upgrade guide also covers backups and rollback.
 
-## Editable prices, including GPT-6 Sol
+## Understanding the estimates
 
-```bash
-codex-limit-estimator prices path
-codex-limit-estimator prices validate
-codex-limit-estimator prices import /path/to/revised-prices.json
-codex-usage --prices /path/to/revised-prices.json
-```
+Results compare **local usage and account quota consumed over the same period**.
+They are estimates, not an API bill or an official subscription allowance.
+Small samples, rounded quota readings, missing prices, and activity on other
+devices can affect the result. Keep prices and workloads comparable when
+comparing runs.
 
-`prices path` prints the actual file to edit in your editor. JSON is validated
-before import. No Python code changes are needed to add a model, update a rate,
-add an alias, or change the long-context rule. The bundled GPT-6 entries use
-Standard reference prices verified against the official pages on 2026-09-23:
+The tools read local session logs and query quota through Codex; they do not
+submit prompts or run model workloads. See the [user guide](docs/USAGE.md) for
+pricing, data storage, and interpretation.
 
-| Model | Input / 1M | Cached read / 1M | Cache write / 1M | Output / 1M |
-| --- | ---: | ---: | ---: | ---: |
-| GPT-6 Astra | $10.00 | $1.00 | $12.50 | $50.00 |
-| GPT-6 Sol | $2.00 | $0.20 | $2.50 | $10.00 |
-| GPT-6 Luna | $0.10 | $0.01 | $0.125 | $0.50 |
+## Documentation
 
-The remaining entries are retained from the supplied 2026-09-11 script, with that
-provenance stated in the JSON. They have not all been reverified as current.
-The reference excludes taxes, regional uplifts, tool charges, Batch/Flex and
-Fast-mode adjustments. It is deliberately a fixed comparison convention, not
-an attempt to reproduce an invoice or subscription charging weights.
+- [User guide](docs/USAGE.md): tracking, prices, and interpreting results.
+- [Command reference](docs/COMMANDS.md): controls, history, analysis, and exports.
+- [Analysis and exports](docs/ANALYSIS.md): calculations, selection rules, and data formats.
+- [Data and side effects](docs/SIDE-EFFECTS.md): files, processes, network access, and privacy.
 
-Example model entry:
+## License
 
-```json
-"gpt-6-sol": {
-  "input": 2.0,
-  "cached": 0.2,
-  "output": 10.0,
-  "cache_write": 2.5,
-  "long_context": true
-}
-```
-
-For models marked `long_context`, the default rule applies above 272,000 input
-tokens PER RESPONSE: input/cache prices x2, output x1.5. The threshold and
-multipliers are JSON settings. Token estimates do not depend on prices.
-
-A tracking run embeds a copy and hash of its price list. Editing the external
-JSON does not rewrite old estimates or silently reprice an active run. To begin
-a separate run with updated prices or a new workload label:
-
-```bash
-codex-limit-estimator shutdown
-codex-limit-estimator status
-# Wait until Daemon: offline, then:
-codex-limit-estimator start tracking --new-run --label "Astra Ultra / VM only" --prices /path/to/prices.json
-```
-
-Historical segments remain available. Comparisons using different price hashes
-are kept separate. For a controlled month-long comparison, keep the SAME price
-file even if market prices change. `codex-usage` is a standalone retrospective
-report and does use the currently selected JSON; an active estimator uses its
-frozen snapshot instead.
-
-## What the estimate means
-
-Let x be consumed weekly quota in percentage POINTS (100 minus percentage left),
-and y be local token use or its API-equivalent reference cost. Within an
-uninterrupted segment:
-
-`equivalent per 100% = 100 * (y1 - y0) / (x1 - x0)`
-
-Example: $40 of matched local usage and 10 percentage points consumed gives
-$400 per 100%. If a comparable later interval gives $20 for 10 points, the
-observed equivalent is $200. This is a legitimate descriptive measurement.
-It does not establish why the ratio changed or prove an official allowance cut.
-
-A lifetime API-equivalent total and current quota remaining are not a matched
-pair of deltas and must not be divided to estimate weekly capacity. Tracking
-starts with new synchronized observations.
-
-The TUI shows:
-
-- API-equivalent cost extrapolated to 100% of quota.
-- Non-cached input, cached input, output, and reasoning token equivalents.
-- Actual quota points and duration supporting the estimate.
-- A rounding envelope and a provisional/partial-pricing label.
-- Cache share, model mix, and priced-token coverage.
-- Daily history and reference-price/workload labels.
-
-Cached tokens are part of input. Reasoning tokens are part of output. Neither is
-added twice. Cache-write tokens, when reported, belong to non-cached input and
-are priced separately. Unknown models retain their tokens and are reported as
-unpriced, not discarded or presented as free usage. Their missing cost means
-the displayed priced-dollar subtotal is incomplete.
-
-## Confidence and uncertainty
-
-The display intentionally says `Confidence: not quantified`. A percentage such
-as "95% confident the weekly cap shrank" would not be justified by these data.
-`priced-token coverage` is a coverage percentage, NOT statistical confidence.
-
-Default quota resolution is one percentage point. If each endpoint has rounding
-error bounded by half a point, a measured change d has rounding uncertainty of
-up to +/-1 point. For a positive cost change C, the conditional envelope is:
-
-`[100*C/(d+1), 100*C/(d-1)]`
-
-The upper end is unbounded when d <= 1. Configure another assumed resolution
-using `--resolution`. This is a deterministic rounding envelope only; it does
-not cover reporting lag, external activity, missing logs, incorrect prices,
-model mix, service tier, reasoning settings, or changes in subscription charging.
-The envelope therefore must not be called a 95% confidence interval.
-Estimates below five consumed points are marked provisional by default.
-
-## Segments, resets, and daily comparisons
-
-The estimator continues tracking across resets; it does NOT stop an agent or
-apply a spending threshold. It starts a new segment on any quota replenishment,
-reset-deadline change, account/plan change, pause/resume, restart, collection gap,
-log read/parse problem, or changed historical model attribution.
-It excludes the interval crossing such a boundary rather than assigning its
-mixed consumption to one side. The first sample on each side is a baseline.
-A correction can look like a reset; the event is labeled descriptively.
-Quota movement without newly indexed local tokens also splits the segment.
-
-Within a day and price/workload/account-meter group, daily results use the ratio of summed
-cost differences to summed quota-point differences, not an average of ratios.
-Exports also include daily input, non-cached, cached, output and reasoning
-equivalents per 100%. Account/plan/bucket identities remain separate.
-Intervals with zero quota movement retain their local deltas in broader aggregates;
-a zero-point daily row has a null estimate. New collection continues across midnight.
-Each adjacent interval belongs to the UTC day of its ending observation, with no
-interpolated midnight sample. Original midnight gaps remain excluded. Aggregated
-rounding bounds count distinct endpoints and cancel shared endpoints; disjoint
-segments generally have wider bounds than one continuous interval. They remain
-conditional rounding envelopes, not statistical confidence intervals.
-
-For the question "did it fall from $400 to $200 in a month?":
-
-1. Keep prices fixed and use enough consumed quota per comparison (prefer tens
-   of points rather than one point).
-2. Use only this machine for all activity consuming the selected account bucket.
-   Browser Work or another device can reduce quota without appearing in local
-   logs, biasing the estimate downward. Pause BEFORE using other devices, resume
-   AFTER that activity and reporting have settled.
-3. Keep model, effort, service mode, context-length regime, and cache mix as
-   comparable as practical. The tool reports models/cache and accepts a workload
-   label; it does NOT automatically infer or control reasoning-effort/service-tier
-   mix from logs. A single-model workload gives a clearer comparison.
-4. Review unpriced coverage, errors and omitted boundaries. Similar API dollar
-   prices do not imply similar subscription quota weights across models.
-5. Compare repeated daily/segment results. A repeated drop under comparable
-   conditions is evidence of a changed effective conversion for that workload,
-   not a direct measurement of hidden server-side token allowances.
-
-## Architecture and compatibility
-
-Three commands share the same package:
-
-- `codex-usage`: incremental log index and token/cost report, with `--json` support.
-- `codex-quota`: one read-only account quota request, optionally `--json`.
-- `codex-limit-estimator`: detached collector, persistent statistics, controls,
-  exports and TUI.
-
-`watch-codex-quota` remains separately useful as an agent stop-policy monitor.
-This estimator reuses its read-only RPC approach through a shared module rather
-than calling/parsing its terminal output. It deliberately does not depend on
-its state file, because that watcher exits after a latched reset while this
-tracker needs to continue into the next interval. Running both makes independent
-account-status requests but creates no model turns.
-
-Only these app-server methods are used: `initialize`, `initialized`,
-`account/read`, `account/rateLimits/read`. No turn/thread creation, queueing,
-reset-credit consumption, or prompt submission is implemented. The official
-protocol is documented, but compatibility with your authenticated CLI must be
-verified locally using `codex-quota`. Errors appear in the TUI/status and are
-retried by ordinary background code with bounded backoff, without model calls.
-
-The index reads `token_usage_record` response records and per-turn model metadata
-from local `sessions` and `archived_sessions` rollout JSONL files. It deduplicates
-by response ID AFTER rejecting foreign-thread copies. It does not derive usage
-by summing repeated `token_count` events. Those legacy events are counted only
-as diagnostics. If no supported records are found, tracking reports a format
-error instead of claiming zero usage. Untimestamped responses count in the
-standalone lifetime report but are excluded from timed estimates. Missing local
-records, imported history and delayed telemetry can still bias intervals.
-
-Initial indexing scans the files once. Subsequent runs read appended bytes,
-retain incomplete trailing lines for the next pass, and deduplicate rescans
-following truncation/replacement. Arbitrary same-inode in-place log edits with
-unchanged metadata are outside the append-only indexing contract. Deleted or
-archived files do not subtract previously observed responses from the ledger.
-No prompts, source code, tool output or credential tokens are stored in the
-index; it retains response/thread IDs, model metadata and token counts.
-
-While the collector runs, `codex-usage` reads its latest index instead of competing
-as a second writer; its output indicates that it may lag up to the sample
-interval. Without the daemon it refreshes the index itself. Use a separate
-`--data-dir` when changing CODEX_HOME/account/machine. Do not merge state databases
-from multiple devices and treat the result as a synchronized account measurement.
-
-Default state location:
-`${XDG_STATE_HOME:-~/.local/state}/codex-limit-estimator/tracking.sqlite3`.
-The state directory is outside any project or repository. Back it up with SQLite's
-backup API or while the daemon is shut down; WAL sidecars matter for live copies.
-The bundle does not install a boot service or send analytics elsewhere.
-
-## Tests and validation limits
-
-```bash
-python3 tests/run_checks.py
-# Or focus on a coherent area:
-python3 tests/run_checks.py --pattern test_install.py
-# Direct standard-library entry point remains available:
-python3 -m unittest discover -s tests
-```
-
-The summary runner prints only counts/status and the process exit code, retaining
-verbose details in ignored `logs/`. Read those details only to investigate failures.
-Tests cover arithmetic/rounding, token subsets, filters and deduplication, zero-change
-intervals, midnight continuity, exclusions, original/schema-1 migrations, backups
-and rollback, consistent reads, price partitions, observed quota ranges, checkpoint
-acknowledgement/errors, offline JSON/CSV commands, terminal controls and installer
-upgrades/rollback. Installation tests isolate prefix, config and state directories.
-The fake RPC harness rejects non-allowlisted methods and exercises actual detached
-processes. No tests access a real account, consume model quota, upgrade a permanent
-installation, or establish live Codex compatibility. Runtime has no third-party
-Python dependencies; this implementation was verified with Python 3.14.
-
-The preview image uses explicitly synthetic data to illustrate layout; it is
-not a measured result from the user's account.
-
-## Sources
-
-- [Official Codex app-server protocol](https://learn.chatgpt.com/docs/app-server).
-- [Official API pricing](https://developers.openai.com/api/docs/pricing).
-- [GPT-6 Sol model pricing and long-context rules](https://developers.openai.com/api/docs/models/gpt-6-sol).
-- The user's supplied `codex-usage` script, including its legacy price snapshot
-  and response-level accounting approach. This bundle corrects identified
-  accounting/visibility issues; exact totals can therefore differ from the old
-  script independently of any quota change.
+[GNU GPL v3.0 only](LICENSE) (`GPL-3.0-only`). Free software, provided without
+warranty. See [NOTICE](NOTICE), or run any command with `--license` for the full
+terms.
