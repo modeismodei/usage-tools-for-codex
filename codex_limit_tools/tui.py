@@ -1,8 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Usage Tools for Codex contributors
 import curses,json,time
 from .common import connect,get,put,stamp,read_snapshot
 from .estimate import report_history,load_history,analyze_history
 from .usage import compact
 from .tracker import running
+from .licensing import SHORT_NOTICE
 
 def run_analysis(history,config):
     run_id=config.get('run_id')
@@ -19,6 +22,7 @@ def lines_for(status,current,daily,config,width=100,history=False,view='segment'
         else:current=None
     phase=status.get('phase','not started').upper()
     rows=[(f'Codex limit estimator | {view} view', 'title'),
+          (SHORT_NOTICE,'muted'),
           (f"{phase}   |   weekly left: {status.get('left','—')}%   |   sample every {config.get('interval',300)}s",'muted'),
           ('Observed local work / consumed account quota. Reference prices, not a bill.','muted'),('','')]
     if view=='history':
@@ -82,7 +86,7 @@ def show(path):
             h,w=win.getmaxyx();win.erase()
             groups=(cached.get('run_analysis') or {}).get('groups',[])
             rows=lines_for(status,current,cached.get('daily',[]),config,w,view=view,run_groups=groups,group_index=group_index)
-            if w<58:rows=[(f'{view} view | {status.get("phase","offline")}','title'),('Widen terminal for details.','muted')]
+            if w<58:rows=[(f'{view} view | {status.get("phase","offline")}','title'),('GPLv3 | no warranty','muted'),('Widen terminal for details.','muted')]
             for y,(text,style) in enumerate(rows[:max(0,h-3)],1):
                 try:win.addstr(y,2,text[:max(0,w-4)],colors.get(style,0)|(curses.A_BOLD if style in ['title','highlight'] else curses.A_DIM if style=='muted' else 0))
                 except curses.error:pass

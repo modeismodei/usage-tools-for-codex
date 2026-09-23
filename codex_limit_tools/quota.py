@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Usage Tools for Codex contributors
 """Read-only Codex app-server RPC, adapted from the quota v2 monitor."""
 import hashlib,json,math,os,select,subprocess,time
 class MonitorError(Exception):

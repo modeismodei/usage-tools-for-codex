@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Usage Tools for Codex contributors
 """Local installation and reversible upgrades; never start a collector."""
 import argparse
 from contextlib import ExitStack, closing
@@ -12,10 +14,11 @@ import time
 import uuid
 
 from .common import SCHEMA_VERSION, daemon_lock, data_path
+from .licensing import add_license_options,startup_notice
 
 COMMANDS = ('codex-limit-estimator', 'codex-usage', 'codex-quota')
-MODULES = ('__init__', 'cli', 'common', 'estimate', 'installer', 'quota', 'render', 'tracker', 'tui', 'usage')
-PAYLOAD = (*COMMANDS, 'install.sh', 'prices.json', 'README.md',
+MODULES = ('__init__', 'cli', 'common', 'estimate', 'installer', 'licensing', 'quota', 'render', 'tracker', 'tui', 'usage')
+PAYLOAD = (*COMMANDS, 'install.sh', 'prices.json', 'README.md', 'LICENSE', 'NOTICE',
            *(f'codex_limit_tools/{name}.py' for name in MODULES))
 OPTIONAL_PAYLOAD = ('TUI-preview.png', 'docs/ANALYSIS.md', 'docs/UPGRADING.md', 'docs/COMMANDS.md')
 
@@ -144,10 +147,12 @@ def install(source, prefix, state_dirs, config_dir, upgrade=False):
 
 def main(argv=None, *, source=None):
     parser = argparse.ArgumentParser(description='Install or safely update Usage Tools for Codex without starting collection.')
+    add_license_options(parser)
     parser.add_argument('--prefix', default=str(pathlib.Path.home()/'.local'))
     parser.add_argument('--upgrade', '--update', action='store_true', help='Preserve and replace an existing installation after daemon shutdown')
     parser.add_argument('--data-dir', action='append', help='Tracking directory to lock and back up; repeat for every configured collector')
     args = parser.parse_args(argv)
+    startup_notice()
     config = pathlib.Path(os.environ.get('XDG_CONFIG_HOME', str(pathlib.Path.home()/'.config')))/'codex-limit-tools'
     paths = args.data_dir or [data_path()]
     try:

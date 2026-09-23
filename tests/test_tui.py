@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Usage Tools for Codex contributors
 import unittest
 
 from codex_limit_tools.estimate import analyze_history, segment_summaries

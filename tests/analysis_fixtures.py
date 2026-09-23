@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Usage Tools for Codex contributors
 """Synthetic observations with independently stated arithmetic expectations."""
 from codex_limit_tools.usage import FIELDS
 

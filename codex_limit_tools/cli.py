@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Usage Tools for Codex contributors
 import argparse,csv,json,os,pathlib,subprocess,sys,time
 from .common import connect,get,put,event,data_path,fingerprint,ensure_run,SCHEMA_VERSION,read_snapshot,stamp
 from .usage import load_prices,index,aggregate,compact
@@ -6,6 +8,7 @@ from .estimate import (report, report_history, load_history, segment_summaries, 
 from .render import DAILY_CSV_FIELDS, analysis_lines, analysis_csv_rows
 from .tracker import daemon,running,request_checkpoint,wait_checkpoint,checkpoint_record,CHECKPOINT_TIMEOUT
 from .quota import QuotaSource
+from .licensing import add_license_options,startup_notice
 
 PACKAGE=pathlib.Path(__file__).resolve().parent.parent
 
@@ -88,6 +91,7 @@ def export_file(dest, data, view):
 
 def estimator(argv=None):
     p = argparse.ArgumentParser(description='Read-only local Codex allowance estimator. No model turns or agent messages.')
+    add_license_options(p)
     p.add_argument('action', nargs='?', default='ui', choices=['ui','start','stop','resume','shutdown','status',
                    'report','export','prices','migrate','runs','segments','analyze','checkpoint','_daemon'])
     p.add_argument('target', nargs='?')
@@ -158,6 +162,7 @@ def estimator(argv=None):
                        snapshot_from=a.snapshot_from, snapshot_to=a.snapshot_to)
     except ValueError as exc:
         p.error(str(exc))
+    if not a.json and a.action != '_daemon':startup_notice()
     if a.action == 'prices':
         if a.target in (None, 'path'):
             print(config_prices(a.prices));return
@@ -271,9 +276,12 @@ def estimator(argv=None):
 
 def usage(argv=None):
     p=argparse.ArgumentParser(description='Incremental local token totals using an editable JSON price list.')
+    add_license_options(p)
     p.add_argument('--codex-home',default=os.environ.get('CODEX_HOME',str(pathlib.Path.home()/'.codex')))
     p.add_argument('--data-dir');p.add_argument('--prices');p.add_argument('--json',action='store_true')
-    a=p.parse_args(argv);path=data_path(a.data_dir);db=connect(path)
+    a=p.parse_args(argv)
+    if not a.json:startup_notice()
+    path=data_path(a.data_dir);db=connect(path)
     try:
         if running(path):
             expected=get(db,'indexed_codex_home') or get(db,'config',{}).get('codex_home')
@@ -294,8 +302,11 @@ def usage(argv=None):
 
 def quota(argv=None):
     p=argparse.ArgumentParser(description='Read account quota without a model turn. Does not control existing watchers.')
+    add_license_options(p)
     p.add_argument('--codex-bin',default='codex');p.add_argument('--bucket',default='codex');p.add_argument('--json',action='store_true')
-    a=p.parse_args(argv);source=QuotaSource(a.codex_bin,a.bucket)
+    a=p.parse_args(argv)
+    if not a.json:startup_notice()
+    source=QuotaSource(a.codex_bin,a.bucket)
     try:
         q=source.read();print(json.dumps(q,indent=2) if a.json else f"Weekly: {q['left']:g}% left | reset timestamp: {q['reset_at']}")
     finally:source.close()

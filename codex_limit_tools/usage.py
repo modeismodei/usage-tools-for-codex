@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Usage Tools for Codex contributors
 """Incremental response-level log index. Never reads prompts into the database."""
 import json,math,pathlib,time
 from datetime import datetime

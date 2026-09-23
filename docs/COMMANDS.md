@@ -4,6 +4,9 @@ All commands accept `--help`. History/control commands accept `--data-dir DIR`;
 use it consistently when you maintain more than one tracker. Examples use
 placeholder IDs from `runs`, `segments` and checkpoint output. JSON output is
 machine-readable; descriptions and progress are omitted from JSON stdout.
+All three commands and `install.sh` also accept `--license` to show GPLv3 terms
+without side effects and `--version` to show the version and license. Human
+startup notices go to stderr; JSON mode suppresses them. The TUI shows the notice.
 
 | Command | Behavior |
 | --- | --- |

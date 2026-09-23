@@ -14,6 +14,19 @@ The command names remain `codex-usage`, `codex-quota`, and
 installation directory `codex-limit-tools`, and existing configuration and state
 paths retain their original names for compatibility.
 
+## License
+
+This project is licensed under the **GNU General Public License, version 3**
+(`GPL-3.0-only`). See the supplied [LICENSE](LICENSE) and project [NOTICE](NOTICE).
+It is free software, with no warranty. Source files carry SPDX identifiers;
+installation and upgrade include both license documents.
+
+Human-readable command startup and the TUI display a short license notice.
+Run any command with `--license` for the full terms or `--version` for the
+version and license identifier. These options work offline without reading logs,
+creating tracking state or contacting Codex. Startup notices use stderr and
+are suppressed in JSON mode, preserving machine-readable stdout.
+
 ## Install and start
 
 Extract the ZIP and run from its extracted directory:

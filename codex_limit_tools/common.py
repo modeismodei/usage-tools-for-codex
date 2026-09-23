@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Usage Tools for Codex contributors
 import fcntl,hashlib,json,os,pathlib,sqlite3,time,uuid
 from contextlib import closing,contextmanager
 

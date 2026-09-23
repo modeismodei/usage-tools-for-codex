@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Usage Tools for Codex contributors
 from contextlib import closing
 import json
 import os
@@ -64,8 +66,11 @@ class Installation(unittest.TestCase):
         self.assertFalse((self.dest/'.env').exists())
         self.assertFalse((self.dest/'development-only.txt').exists())
         self.assertFalse((self.dest/'codex_limit_tools/extra.py').exists())
+        self.assertEqual((self.dest/'LICENSE').read_bytes(),(ROOT/'LICENSE').read_bytes())
+        self.assertEqual((self.dest/'NOTICE').read_bytes(),(ROOT/'NOTICE').read_bytes())
         for name in installer.COMMANDS:
             self.assertIn('usage:',self.command(name,'--help').stdout)
+            self.assertEqual(self.command(name,'--license').stdout,(ROOT/'LICENSE').read_text())
         usage = json.loads(self.command('codex-usage','--codex-home',str(self.root/'empty-codex'),
                                         '--data-dir',str(self.root/'usage-state'),'--json').stdout)
         self.assertEqual(usage['totals']['input'],0)

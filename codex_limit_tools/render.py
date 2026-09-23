@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Usage Tools for Codex contributors
 """Rendering helpers that never read quota or change tracking state."""
 from .common import stamp
 from .usage import FIELDS, compact
