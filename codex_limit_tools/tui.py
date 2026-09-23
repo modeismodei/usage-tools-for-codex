@@ -12,7 +12,9 @@ def lines_for(status,current,daily,config,width=100,history=False):
     if history:
         rows += [('UTC day       API $ / 100%     quota pp    cache %   priced %','title')]
         for d in daily[-15:]:
-            rows.append((f"{d['day']}    ${d['api_equivalent_per_100']:>10,.2f}     {d['points']:>7.2f}    {d['cache_share']:>6.1f}    {d['priced_coverage']:>6.1f}",'normal'))
+            cost=f"{d['api_equivalent_per_100']:,.2f}" if d['api_equivalent_per_100'] is not None else 'n/a'
+            coverage=f"{d['priced_coverage']:.1f}" if d['priced_coverage'] is not None else '?'
+            rows.append((f"{d['day']}    ${cost:>10}     {d['points']:>7.2f}    {d['cache_share']:>6.1f}    {coverage:>6}",'normal'))
         rows += [('',''),('Groups with different labels or price snapshots remain separate.','muted')]
     elif current:
         e=current.get('estimate')
@@ -21,7 +23,7 @@ def lines_for(status,current,daily,config,width=100,history=False):
             rows += [(f"100% weekly usage ≈ ${e['cost']:,.2f} API equivalent",'highlight')]
             lo,hi=current['cost_rounding_range']
             rows += [(f"Rounding envelope: ${lo:,.2f} — "+(f'${hi:,.2f}' if hi is not None else 'unbounded'),'normal'),
-                     (f"Confidence: not quantified   |   priced token coverage: {current['priced_coverage']:.1f}%",'muted'),
+                     (f"Confidence: not quantified   |   priced token coverage: {current['priced_coverage'] if current['priced_coverage'] is not None else 'unknown'}%",'muted'),
                      (f"Evidence: {current['points']:.2f} quota points over {current['duration']/3600:.2f} h   |   {current['quality']}",'normal'),('',''),
                      ('TOKEN TYPE                 OBSERVED DELTA           PER 100%','title')]
             for label,key in [('Input non-cached','noncached'),('Input cached','cached'),('Output','output'),('Reasoning (inside output)','reasoning')]:

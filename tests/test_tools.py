@@ -72,6 +72,22 @@ class Tests(unittest.TestCase):
   t=Collector(self.db,c,Fake());t.collect();t.collect()
   self.assertEqual(self.db.execute('SELECT COUNT(*) FROM segments').fetchone()[0],2)
   t.boundary('pause');self.assertIsNone(t.segment)
+ def test_midnight_collection_continues(self):
+  from analysis_fixtures import MIDNIGHT
+  self.log(ts=86000)
+  c={'prices':self.prices,'codex_home':str(self.home),'started_at':85000,'interval':300,'resolution':1,'min_points':5,'label':'test','codex_bin':'unused','bucket':'codex'}
+  samples=[{'used':s['used'],'left':100-s['used'],'reset_at':9999999999,'account':'synthetic','plan':'pro','at':s['ts']} for s in MIDNIGHT]
+  class Fake:
+   def read(inner):return samples.pop(0)
+  t=Collector(self.db,c,Fake())
+  with patch('codex_limit_tools.tracker.aggregate',side_effect=[s['metrics'] for s in MIDNIGHT]):
+   for s in MIDNIGHT:
+    with patch('codex_limit_tools.tracker.time.time',return_value=s['ts']):t.collect()
+  self.assertEqual(self.db.execute('SELECT COUNT(*) FROM segments').fetchone()[0],1)
+  data=report(self.db,{})
+  self.assertEqual(data['segments'][0]['delta']['cost'],8)
+  self.assertEqual(data['daily'][0]['day'],'1970-01-02')
+  self.assertEqual(data['daily'][0]['points'],2)
  def test_prices_json_validation(self):
   data=dict(self.prices);data['long_input_multiplier']=-1;p=self.root/'bad.json';p.write_text(json.dumps(data))
   with self.assertRaises(ValueError):load_prices(p)

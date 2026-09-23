@@ -29,7 +29,9 @@ def text_report(db,c):
     if s.get('error'):print('Error: '+s['error'])
     print('UTC day     API $ / 100%   quota pp   cache %   priced %   label')
     for d in data['daily']:
-        print(f"{d['day']}  {d['api_equivalent_per_100']:>12,.2f} {d['points']:>10.2f} {d['cache_share']:>9.1f} {d['priced_coverage']:>10.1f}   {d['label']}")
+        cost=f"{d['api_equivalent_per_100']:,.2f}" if d['api_equivalent_per_100'] is not None else 'n/a'
+        coverage=f"{d['priced_coverage']:.1f}" if d['priced_coverage'] is not None else 'unknown'
+        print(f"{d['day']}  {cost:>12} {d['points']:>10.2f} {d['cache_share']:>9.1f} {coverage:>10}   {d['label']}")
     if not data['daily']:print('Collecting: no estimable segment yet.')
     return data
 

@@ -44,3 +44,39 @@ databases get a uniquely named `tracking.sqlite3.backup-v...` file before change
 failures roll back and retain that backup. Newer unsupported schemas are refused.
 Shutdown still works against the original schema. Stop the collector and confirm
 it is offline before migration; no old observations are repriced or bridged.
+
+## Selection, grouping and uncertainty
+
+The pure `analyze_history` function accepts persisted segments and snapshots.
+Run, segment, label and time filters intersect; repeated IDs are deduplicated.
+Timestamps require a timezone. A date-only start means UTC midnight; a date-only
+end means the following UTC midnight. Snapshot selection is half-open
+`start <= observed_time < end`. Only adjacent recorded snapshots inside the
+selection contribute. Effective snapshot IDs/times and uncovered edge durations
+are returned; no counters or quota observations are interpolated.
+
+Groups always partition price hash, meter hash and label. Runs stay separate
+unless across-run aggregation is explicit. Unknown legacy run IDs stay separate
+by segment by default. Compatibility does not imply equal model/effort/cache mix;
+model deltas and cache share are diagnostics, not proof of controlled conditions.
+
+New segments continue across UTC midnight. Each adjacent interval belongs to its
+ending UTC day, including intervals whose quota delta is zero. Such a daily row
+can have a null estimate while still contributing tokens/cost to a longer
+selection. Original segment boundaries, including legacy midnight gaps, remain
+excluded with recorded reasons. Pauses, resets, errors and other gaps are never
+bridged. Coverage durations describe observations, not an entire weekly cycle.
+
+For each distinct snapshot endpoint, add its signed coefficient across included
+intervals. The conditional quota error is the sum of absolute coefficients times
+half that endpoint's assumed resolution. Shared interior endpoints cancel; two
+disjoint segments usually retain twice the one-segment error. Bounds divide the
+metric delta by upper/lower consumption bounds. A non-positive lower consumption
+bound yields a null upper estimate, meaning unbounded. These bounds do not cover
+reporting lag, other-device activity, missing logs or workload variation.
+
+Priced coverage is null when the counters cannot establish it; monetary subtotals
+then remain partial. Unpriced tokens are retained. Observed quota points, priced
+coverage and rounding bounds are distinct from statistical confidence and from
+an official allowance. More than 100 observed points are an aggregate equivalent
+across replenishments, not one complete weekly cycle.

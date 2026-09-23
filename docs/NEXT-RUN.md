@@ -1,10 +1,11 @@
 # Implementation checkpoint
 
-- T01: `888ac0a`, interval/export contracts and deterministic fixtures.
-- T02: versioned transactional migrations, backups and persistent run UUIDs.
-- Next: T03–T05, shared filtered analysis, midnight continuity and coverage.
-- Baseline plus T01: 18 tests passed at `888ac0a`.
-- T02 working revision: 5 migration/read-consistency tests and 15 original tests passed.
+- T01: `888ac0a`; T02: `ff8c82c`.
+- T03–T05: shared filtered aggregation, midnight continuity and coverage bounds.
+- Next: T06–T07, offline CLI/export modes and observed quota range selection.
+- Full suite: 35 tests passed for the analysis milestone working revision.
+- Subsequent coverage/error refinements: 14 analysis and 16 original tests passed;
+  the 5 unchanged migration tests retain their earlier passing evidence.
 - No blockers or unrelated/uncommitted work at this checkpoint.
 - Installation upgrade mode requested; test only temporary prefixes.
 - All verification is synthetic/offline; no live account verification.

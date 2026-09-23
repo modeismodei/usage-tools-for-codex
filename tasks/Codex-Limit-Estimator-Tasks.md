@@ -73,15 +73,15 @@ Compatible segments may describe more than 100 percentage points of observed con
 
 **Dependencies:** T01, T02. **Primary file:** `estimate.py`.
 
-- [ ] Add a pure analysis layer that selects observations and returns normalized intervals and grouped results. Reuse it in CLI, TUI, and exports.
-- [ ] Support filtering by run, segment IDs, workload label, and time range.
-- [ ] Accept ISO 8601 timestamps with timezone offsets. Interpret date-only start as UTC midnight and date-only end as the following UTC midnight; document the half-open time selection convention.
-- [ ] Use only observed snapshots inside the requested selection. Report effective endpoints and uncovered time at the requested edges; do not interpolate tokens or quota.
-- [ ] Aggregate compatible intervals by run, UTC day, or overall selection.
-- [ ] Always partition by price hash, meter hash, and workload label. Default to separate run results; permit explicit across-run aggregation while retaining source run IDs.
-- [ ] Do not claim the compatibility keys prove identical model, effort, cache, or workload mix. Show available mix diagnostics and label remaining confounders.
-- [ ] Prevent duplicated intervals when overlapping selectors identify the same data.
-- [ ] Return an explicit non-estimable result when the denominator is zero or counters are invalid.
+- [x] Add a pure analysis layer that selects observations and returns normalized intervals and grouped results. Reuse it in CLI, TUI, and exports.
+- [x] Support filtering by run, segment IDs, workload label, and time range.
+- [x] Accept ISO 8601 timestamps with timezone offsets. Interpret date-only start as UTC midnight and date-only end as the following UTC midnight; document the half-open time selection convention.
+- [x] Use only observed snapshots inside the requested selection. Report effective endpoints and uncovered time at the requested edges; do not interpolate tokens or quota.
+- [x] Aggregate compatible intervals by run, UTC day, or overall selection.
+- [x] Always partition by price hash, meter hash, and workload label. Default to separate run results; permit explicit across-run aggregation while retaining source run IDs.
+- [x] Do not claim the compatibility keys prove identical model, effort, cache, or workload mix. Show available mix diagnostics and label remaining confounders.
+- [x] Prevent duplicated intervals when overlapping selectors identify the same data.
+- [x] Return an explicit non-estimable result when the denominator is zero or counters are invalid.
 
 **Acceptance:** mixed prices/accounts remain separate; repeated selectors do not double-count; sum-of-deltas results match fixtures; archived data can be analyzed without starting the collector or contacting Codex.
 
@@ -89,12 +89,12 @@ Compatible segments may describe more than 100 percentage points of observed con
 
 **Dependencies:** T01, T03. **Primary files:** `tracker.py`, `estimate.py`.
 
-- [ ] Stop treating UTC midnight as a collection discontinuity for new data. Preserve continuous endpoints across dates.
-- [ ] Retain genuine breaks for replenishment/correction, account/plan changes, pauses, collection failures/gaps, and attribution revisions.
-- [ ] Calculate daily views from adjacent observed intervals inside continuous segments. Assign a midnight-crossing interval to its ending UTC day and disclose this convention; do not interpolate an exact midnight observation.
-- [ ] Ensure that summing the daily interval deltas reproduces the overall continuous-selection totals, including intervals with zero quota change.
-- [ ] Keep daily groups with local tokens but zero observed quota change visible with a null daily estimate; their deltas still contribute to a compatible broader aggregate.
-- [ ] Preserve original historical segmentation. Do not silently bridge legacy midnight gaps; any future recovery must be explicitly labeled and independently validated.
+- [x] Stop treating UTC midnight as a collection discontinuity for new data. Preserve continuous endpoints across dates.
+- [x] Retain genuine breaks for replenishment/correction, account/plan changes, pauses, collection failures/gaps, and attribution revisions.
+- [x] Calculate daily views from adjacent observed intervals inside continuous segments. Assign a midnight-crossing interval to its ending UTC day and disclose this convention; do not interpolate an exact midnight observation.
+- [x] Ensure that summing the daily interval deltas reproduces the overall continuous-selection totals, including intervals with zero quota change.
+- [x] Keep daily groups with local tokens but zero observed quota change visible with a null daily estimate; their deltas still contribute to a compatible broader aggregate.
+- [x] Preserve original historical segmentation. Do not silently bridge legacy midnight gaps; any future recovery must be explicitly labeled and independently validated.
 
 **Acceptance:** new collection across midnight loses no interval; overall totals equal the sum of daily deltas; resets and pauses are never bridged as continuous consumption.
 
@@ -102,13 +102,13 @@ Compatible segments may describe more than 100 percentage points of observed con
 
 **Dependencies:** T03, T04. **Primary files:** `estimate.py`, CLI/TUI formatting.
 
-- [ ] Report observed consumption in percentage points, included interval count, source segment count, covered duration, requested/effective endpoints, excluded durations and known reasons.
-- [ ] Distinguish observed percentage points from a percentage of statistical confidence or a percentage of an official allowance measured completely.
-- [ ] Report priced-token coverage and unpriced token counts. Label monetary estimates as partial whenever relevant pricing is missing.
-- [ ] Preserve the conditional quota-rounding envelope. For disjoint intervals, account for each distinct endpoint's uncertainty; cancel shared endpoints where algebraically appropriate.
-- [ ] Do not use the single-interval rounding bound for an arbitrary sum of disjoint segments. Return an unbounded upper estimate when the lower consumption bound is non-positive.
-- [ ] State that rounding bounds exclude quota-reporting lag, other-device consumption, incomplete local logs, and workload variation.
-- [ ] Do not infer a provider quota reduction solely from a change in API-equivalent estimates.
+- [x] Report observed consumption in percentage points, included interval count, source segment count, covered duration, requested/effective endpoints, excluded durations and known reasons.
+- [x] Distinguish observed percentage points from a percentage of statistical confidence or a percentage of an official allowance measured completely.
+- [x] Report priced-token coverage and unpriced token counts. Label monetary estimates as partial whenever relevant pricing is missing.
+- [x] Preserve the conditional quota-rounding envelope. For disjoint intervals, account for each distinct endpoint's uncertainty; cancel shared endpoints where algebraically appropriate.
+- [x] Do not use the single-interval rounding bound for an arbitrary sum of disjoint segments. Return an unbounded upper estimate when the lower consumption bound is non-positive.
+- [x] State that rounding bounds exclude quota-reporting lag, other-device consumption, incomplete local logs, and workload variation.
+- [x] Do not infer a provider quota reduction solely from a change in API-equivalent estimates.
 
 **Acceptance:** continuous and disjoint interval fixtures produce the appropriate different bounds; partial pricing and unknown coverage cannot appear as fully measured weekly capacity.
 

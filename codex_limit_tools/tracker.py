@@ -12,6 +12,8 @@ class Collector:
     def collect(self):
         db=self.db;c=self.config
         stats=index(db,c['codex_home'])
+        if stats['invalid']:
+            raise ValueError('Log parse/read error; a fresh baseline is required after recovery')
         if not db.execute('SELECT 1 FROM responses LIMIT 1').fetchone():
             raise ValueError('No supported token_usage_record entries indexed; check CODEX_HOME/log format before estimating')
         quota=self.quota.read()
@@ -20,19 +22,18 @@ class Collector:
         metrics=aggregate(db,c['prices'],since=c['started_at'],until=quota['at'])
         revision=get(db,'mapping_revision',0)
         reason=None
-        if stats['invalid']:reason='log parse/read error'
         if self.last:
             if quota['account']!=self.last['account'] or quota['plan']!=self.last['plan']:reason='account/plan changed'
             elif quota['used']<self.last['used']-1e-7:reason='quota replenishment/correction'
             elif quota['reset_at']!=self.last['reset_at']:reason='reset deadline changed'
-            elif stamp(quota['at'])[:10]!=stamp(self.last['at'])[:10]:reason='UTC day boundary'
             elif quota['at']-self.last['at']>c['interval']*2.5+60:reason='collection gap'
+            elif quota['at']<=self.last['at']:reason='non-increasing observation time'
             elif revision!=self.mapping:reason='historical model attribution changed'
             elif quota['used']>self.last['used'] and metrics['input']+metrics['output']==self.last['metrics']['input']+self.last['metrics']['output']:reason='quota moved without local tokens'
         if reason:self.boundary(reason);event(db,'boundary',reason)
         if self.segment is None:
             cursor=db.execute('INSERT INTO segments(started,reason,label,price_hash,config,run_id) VALUES (?,?,?,?,?,?)',
-                (quota['at'],self.pending_reason,c['label'],fingerprint(c['prices']),json.dumps({'resolution':c['resolution'],'min_points':c['min_points'],'meter_hash':fingerprint({'account':quota['account'],'plan':quota['plan'],'bucket':quota['bucket'] if 'bucket' in quota else c['bucket']})}),c['run_id']))
+                (quota['at'],self.pending_reason,c['label'],fingerprint(c['prices']),json.dumps({'resolution':c['resolution'],'min_points':c['min_points'],'interval':c['interval'],'meter_hash':fingerprint({'account':quota['account'],'plan':quota['plan'],'bucket':quota['bucket'] if 'bucket' in quota else c['bucket']})}),c['run_id']))
             self.segment=cursor.lastrowid
         db.execute('INSERT INTO snapshots(segment,ts,used,reset_at,metrics) VALUES (?,?,?,?,?)',
                    (self.segment,quota['at'],quota['used'],quota['reset_at'],json.dumps(metrics)))
