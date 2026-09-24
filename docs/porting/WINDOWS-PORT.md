@@ -138,3 +138,87 @@ Temporary installation works from PowerShell without Bash, admin rights or symli
 **Completion record**
 
 Report only: changed behavior/files, completed task IDs, environment, test commands/counts/revision, console result, live-check status, Linux-gate status, and concrete limitations. Keep detailed logs local and ignored. Mark the implementation ready for the remaining gate rather than “fully supported” when native-console, live-integration or Linux evidence is still missing. Do not revise the README in this pipeline.
+
+
+## Native implementation handoff — 2026-09-24
+
+Implementation candidate: `4ab5f5e170500981084bbce2ecb234986b9e0f4e`.
+W-01 through W-05 are implemented; W-06 native evidence and remaining gates
+are recorded here. Acceptance remains limited by the explicit gaps below.
+README and the existing tasks directory were not changed.
+
+Environment: Windows 11 build 26200, AMD64; system CPython 3.14.7 x64,
+used through `.runtime/windows-venv`; prebuilt `windows-curses` 2.4.2
+(`cp314-win_amd64`). Console: native PowerShell 7.6.5 via ConPTY.
+No compiler, WSL, Git Bash, Codex CLI installation or live account access.
+The initial Python 3.12 environment was replaced as the selected development
+interpreter before running the verification batches.
+
+### Local operation
+
+- Run `python install.py` with the selected interpreter; normal installer
+  options are unchanged. Install curses explicitly in that interpreter when
+  interactive use is wanted. Neither installer nor application installs it.
+- Windows installs three `.cmd` launchers bound to the installing interpreter.
+  Install paths with spaces and Unicode were verified. A non-ASCII interpreter
+  path needs an ASCII Windows short-path alias, otherwise installation fails
+  explicitly and rolls back; an ASCII interpreter path avoids this limitation.
+- Use existing `--codex-bin` with a native `codex.exe`, including a desktop-app
+  bundled executable if available. Desktop authentication and log compatibility
+  remain unverified. Unresolved `.cmd`/`.ps1` wrappers are rejected explicitly.
+- New state directories/files receive private ACLs. An existing state directory
+  with broader access is refused before SQLite writes; choose a new private
+  subdirectory. Existing ACLs are preserved. Export temporaries have private ACLs
+  even when their destination directory has broader access.
+
+### Executed verification
+
+All commands below used `.runtime/windows-venv/Scripts/python.exe -B`.
+For the focused batches, the exact runner was:
+
+```python
+import sys, unittest
+sys.path.insert(0, 'tests')
+s = unittest.defaultTestLoader.loadTestsFromNames(names)
+r = unittest.TextTestRunner().run(s)
+sys.exit(not r.wasSuccessful())
+```
+
+- Batch A: `names = ['test_history', 'test_checkpoints', 'test_rpc', 'test_tools']`;
+  31 tests initially, nine errors. The separate `test_platform.py` discovery had
+  three fixture failures. Fixed OWNER RIGHTS ACL recognition, child-code quoting,
+  the PowerShell module environment and venv-launcher cleanup timing.
+  Focused rerun: 17 tests, OK with seven symlink subcase skips, using
+  `['test_platform', 'test_history', 'test_checkpoints',
+  'test_tools.Tests.test_fake_rpc_allowlist',
+  'test_side_effects.SideEffects.test_mutable_state_aliases_are_rejected',
+  'test_side_effects.SideEffects.test_export_replaces_links_without_touching_their_targets',
+  'test_side_effects.SideEffects.test_new_private_state_backups_and_daemon_logs_are_owner_only']`.
+  Unaffected RPC and calculation results were reused until the final suite.
+- Batch B: `names = ['test_install', 'test_licensing', 'test_tui', 'test_side_effects']`;
+  25 tests, OK with ten symlink skips, including subcases.
+- Final: `.runtime/windows-venv/Scripts/python.exe -B tests/run_audit.py`;
+  87 tests, exit 0, no failures/errors, ten symlink skips (three methods and seven
+  subcases). Synthetic sentinels unchanged; no Python network-guard denials.
+  This is offline evidence, not an OS-wide network trace. The tested code and
+  fixtures are exactly those in the candidate above; subsequent handoff edits
+  only change documentation. Verbose logs are retained under ignored `.runtime`.
+- Skipped fixtures: daemon-log symlink, installer internal-directory symlink,
+  prices-import symlink, JSON/CSV export symlinks, database symlink, and
+  WAL/SHM/journal/daemon-lock symlinks. The account lacks symlink privilege.
+  Hard links and a native directory junction were exercised successfully.
+- One combined native console session: 110x40 rows/color roles, segment/run/
+  history, `v`, `h`, `[`, `]`, `s`, `r`, resize to 30x12, `q` and terminal
+  restoration observed. The synthetic collector survived launch-console exit
+  and TUI detach; shutdown from a second console released its lock. No synthetic
+  collector or Python app-server remained at the final process check.
+
+### Remaining gates
+
+- Native Linux regression is pending for the exact candidate above. Run
+  `python3 -B tests/run_audit.py` on Linux; no Linux result is claimed here.
+- Live integration with the GUI-bundled executable, its authentication and
+  existing GUI log schema is unverified and requires separate authorization.
+- Symlink-specific native acceptance remains unverified on this account.
+  No claim is made for other Windows architectures, Python builds, network
+  filesystems or macOS. Existing POSIX paths remain for the Linux gate.

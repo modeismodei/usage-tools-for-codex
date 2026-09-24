@@ -1,27 +1,30 @@
-# Audit completion checkpoint
+# Windows port handoff
 
-- T01: `888ac0a`; T02: `ff8c82c`; T03–T05: `102cebe`.
-- T06–T07: `fa7fd4f`; T08: `f44c9c2`; T09: `04b0876`; T10: `c09cb89`.
-- All backlog acceptance criteria are satisfied; no implementation task remains.
-- GPLv3 adoption: `0d52d17`, supplied license unchanged, source notices,
-  installed license files and startup/--license/--version output.
-- Daily partial-pricing labels: `283333d` (audit starting revision).
-- Audit fixes: `0d862fb`, file-link escapes, partial output replacement, new state
-  permissions, premature validation side effects and package bytecode writes.
-- Offline indexing now holds the daemon lock; active index reads are read-only.
-- RPC transport enforces the quota allowlist; failure/cleanup regressions added.
-- Full suite: 76 tests passed on Python 3.14 for `0d862fb`.
-  Run `python3 -B tests/run_audit.py --trace` (requires strace).
-  Raw artifacts remain under ignored `.runtime/audit/`.
-- Trace: zero internet calls, outside-workspace writes or unresolved file calls;
-  synthetic sentinels unchanged. See docs/SIDE-EFFECTS.md for command boundaries.
-- Checks cover synthetic history/migrations, fake read-only RPC, PTY controls,
-  CLI/exports, checkpoints, temporary installations/upgrades and rollback.
-- Audit report: docs/PRE-PUBLICATION-AUDIT.md; command matrix: docs/SIDE-EFFECTS.md.
-- Local history/index review completed with no unresolved findings in its scope.
-- Next implementation task: none. Live-account compatibility remains unverified.
-- Next user action: follow docs/UPGRADING.md when ready to update the installation.
-- No blockers, unrelated edits, or intentionally uncommitted task work.
-- Permanent installation and real tracking database were not modified.
-- Live account compatibility and provider reporting behavior remain unverified.
-- All commits are local; nothing was pushed.
+- Active pipeline: W-01 through W-06; the former backlog was not modified.
+- Implementation commit: `4ab5f5e170500981084bbce2ecb234986b9e0f4e`.
+- W-01–W-05 implemented: native ACL/file/lock handling, bounded RPC pipe reader,
+  detached collector, lazy curses preflight, Python installer and .cmd launchers.
+- W-06: native offline verification and console session recorded; remaining
+  acceptance gates are explicit below. See docs/porting/WINDOWS-PORT.md.
+- Environment: Windows 11 build 26200 AMD64, CPython 3.14.7 x64 from the system
+  installation in an isolated venv, windows-curses 2.4.2 prebuilt wheel;
+  PowerShell 7.6.5 / native ConPTY console.
+- Final command: `.runtime/windows-venv/Scripts/python.exe -B tests/run_audit.py`.
+- Candidate above: 87 tests, exit 0, no failures/errors, ten symlink skips
+  (three methods and seven subcases); synthetic sentinels unchanged.
+- Focused A/B commands and counts, including corrected failures, are recorded
+  in the Windows plan. Detailed logs remain ignored under .runtime.
+- Console: 110-column views/colors/keys, 30-column resize, pause/resume, q,
+  terminal restoration, collector survival after launcher exit, second-console
+  shutdown and lock release verified with synthetic logs and fake RPC only.
+- Next concrete action: run `python3 -B tests/run_audit.py` on native Linux
+  at the exact implementation commit above. Linux regression gate is PENDING.
+- GUI-only live integration is UNVERIFIED; no account read was authorized.
+  A desktop bundled native executable can be supplied with --codex-bin.
+- Symlink-specific checks need an account with symlink privilege; hard-link
+  and junction checks passed. Unresolved .cmd/.ps1 Codex shims are rejected.
+- Non-ASCII Python executable paths need an ASCII short-path alias; selected
+  interpreter and Unicode/space-containing install paths passed.
+- README/tasks unchanged. User installation/configuration/history untouched.
+  No Codex CLI was installed; no persistent real-account collector was started.
+- Commits are local only. No unrelated or intentionally uncommitted task work.
