@@ -77,7 +77,16 @@ controls. Windows commands use the `.cmd` extension.
 
 ## Linux
 
-Refer to [README.md](../README.md#linuxmacos).
+Requires Python 3.10+ with SQLite and curses, Bash, and an authenticated Codex CLI
+on your `PATH`. From the downloaded repository root, optionally check dependencies,
+then install:
+
+```bash
+bash doctor.sh  # optional
+bash install.sh
+```
+
+Make sure `~/.local/bin` is on your `PATH`.
 
 ## macOS
 

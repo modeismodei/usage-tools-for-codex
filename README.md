@@ -21,6 +21,9 @@ Requires **Python 3.10+** (including SQLite and curses), **Bash**, and an instal
 authenticated **Codex CLI** on your `PATH`. No additional Python packages or API
 key are needed.
 
+On Linux, you can optionally run `bash doctor.sh` from the repository root to
+check dependencies before installing.
+
 Clone or download this repository, then run from its root directory:
 
 ```bash
