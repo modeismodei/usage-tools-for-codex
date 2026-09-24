@@ -156,6 +156,11 @@ interpreter before running the verification batches.
 
 ### Local operation
 
+- For the current Windows setup flow, see [Installation](../INSTALL.md):
+  `configure.ps1`, `doctor-windows.ps1`, then `install.ps1`. The configuration
+  step can create the dedicated venv, install prebuilt dependencies with consent,
+  save Python/Codex paths and add the default command directory to the user PATH.
+  This follow-up was explicitly requested after the original port pipeline.
 - Run `.\doctor-windows.ps1` from the checkout to check dependencies without
   installing anything. It runs with PowerShell alone; when Python is found it
   probes its modules. Use `-PythonPath` to choose the exact interpreter,
@@ -175,16 +180,18 @@ interpreter before running the verification batches.
   real interpreter/autodiscovery checks on PowerShell 7.6.5; full native offline
   suite via the same `tests/run_audit.py` command: 93 tests, exit 0, ten existing
   symlink skips. No real Codex invocation or installation was performed.
-- Run `python install.py` with the selected interpreter; normal installer
+- Alternatively, run `python install.py` with the selected interpreter; normal installer
   options are unchanged. Install curses explicitly in that interpreter when
   interactive use is wanted. Neither installer nor application installs it.
 - Windows installs three `.cmd` launchers bound to the installing interpreter.
   Install paths with spaces and Unicode were verified. A non-ASCII interpreter
   path needs an ASCII Windows short-path alias, otherwise installation fails
   explicitly and rolls back; an ASCII interpreter path avoids this limitation.
-- Use existing `--codex-bin` with a native `codex.exe`, including a desktop-app
-  bundled executable if available. Desktop authentication and log compatibility
-  remain unverified. Unresolved `.cmd`/`.ps1` wrappers are rejected explicitly.
+- `configure.ps1` saves a native `codex.exe`, including a desktop-app bundled
+  executable, in the Windows-only `windows.json` file. Quota and the estimator
+  share that saved default without repeated bundle discovery; explicit
+  `--codex-bin` still overrides it. Desktop authentication and log compatibility
+  have not been agent-verified. Unresolved `.cmd`/`.ps1` wrappers remain rejected.
 - New state directories/files receive private ACLs. An existing state directory
   with broader access is refused before SQLite writes; choose a new private
   subdirectory. Existing ACLs are preserved. Export temporaries have private ACLs

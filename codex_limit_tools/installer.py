@@ -19,9 +19,9 @@ from .licensing import add_license_options,startup_notice
 COMMANDS = ('codex-limit-estimator', 'codex-usage', 'codex-quota')
 MODULES = ('__init__', 'cli', 'common', 'estimate', 'installer', 'licensing', 'platform_io', 'quota', 'render', 'tracker', 'tui', 'usage')
 COMMAND_FILES = tuple(n+'.cmd' if WINDOWS else n for n in COMMANDS)
-PAYLOAD = (*COMMANDS, 'doctor-windows.ps1', 'install.py', 'install.sh', 'prices.json', 'README.md', 'LICENSE', 'NOTICE',
+PAYLOAD = (*COMMANDS, 'configure.ps1', 'doctor-windows.ps1', 'install.ps1', 'install.py', 'install.sh', 'prices.json', 'README.md', 'LICENSE', 'NOTICE',
            *(f'codex_limit_tools/{name}.py' for name in MODULES))
-OPTIONAL_PAYLOAD = ('TUI-preview.png', 'docs/ANALYSIS.md', 'docs/UPGRADING.md', 'docs/COMMANDS.md')
+OPTIONAL_PAYLOAD = ('TUI-preview.png', 'docs/INSTALL.md', 'docs/ANALYSIS.md', 'docs/UPGRADING.md', 'docs/COMMANDS.md')
 
 
 def copy_payload(source, stage):

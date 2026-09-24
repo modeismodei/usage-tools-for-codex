@@ -10,10 +10,28 @@ def resolve_executable(executable):
         return executable
     # Own a native process directly; npm/PowerShell shims can orphan children.
     value = os.fspath(executable)
+    if value == 'codex':
+        config_path = pathlib.Path.home()/'.local/share/usage-tools-for-codex/windows.json'
+        try:
+            config = json.loads(config_path.read_text(encoding='utf-8-sig'))
+            if not isinstance(config, dict) or config.get('version') != 1:
+                raise ValueError('Unsupported configuration version')
+            configured = config.get('codex_path')
+            if configured is not None:
+                if (not isinstance(configured, str) or not pathlib.Path(configured).is_absolute()
+                        or pathlib.Path(configured).suffix.lower() != '.exe'
+                        or not pathlib.Path(configured).is_file()):
+                    raise ValueError('Configured native Codex executable is unavailable')
+                return configured
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError) as exc:
+            raise MonitorError('Windows Codex configuration is unusable; rerun configure.ps1 '
+                               'or supply --codex-bin with a native executable. '+str(exc)) from None
     native = shutil.which(value + '.exe') if pathlib.Path(value).suffix == '' else None
     found = native or shutil.which(value)
     if not found or pathlib.Path(found).suffix.lower() != '.exe':
-        raise MonitorError('Native Codex executable required; use --codex-bin with the full '
+        raise MonitorError('Native Codex executable required; run configure.ps1 on Windows or use --codex-bin with the full '
                            'path to codex.exe (including a desktop-app bundled executable). '
                            'Unresolved .cmd/.ps1 shims are not supported.')
     return found

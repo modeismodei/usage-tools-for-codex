@@ -9,6 +9,7 @@ import time
 import pathlib
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from codex_limit_tools.quota import RPC, MonitorError, QuotaSource
 
@@ -78,6 +79,30 @@ class ReadOnlyRPC(unittest.TestCase):
         rejected = [m for m in calls if 'method' not in m]
         self.assertEqual(len(rejected), 1)
         self.assertEqual(rejected[0]['error']['code'], -32601)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows saved executable with synthetic RPC')
+    def test_saved_default_executable_is_shared_by_quota_and_tracker_source(self):
+        self.mode('normal')
+        home = pathlib.Path(self.temp.name)/'home'
+        config = home/'.local/share/usage-tools-for-codex/windows.json'
+        config.parent.mkdir(parents=True)
+        config.write_text(json.dumps({'version':1, 'codex_path':sys.executable}), encoding='utf-8')
+        with patch.dict(os.environ, {'USERPROFILE':str(home)}):
+            from codex_limit_tools import cli
+            import contextlib, io
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                cli.quota(['--json'])
+            self.assertEqual(json.loads(output.getvalue())['left'], 80)
+            # Existing tracker configuration stores 'codex'; it uses this same source.
+            source = QuotaSource('codex')
+            try:
+                self.assertEqual(source.read()['left'], 80)
+            finally:
+                source.close()
+        methods = [json.loads(line)['method'] for line in pathlib.Path(str(self.fake)+'.calls').read_text().splitlines()
+                   if 'method' in json.loads(line)]
+        self.assertEqual(methods, ['initialize', 'initialized', 'account/read', 'account/rateLimits/read'] * 2)
 
     def test_timeout_closes_owned_server(self):
         self.mode('timeout')

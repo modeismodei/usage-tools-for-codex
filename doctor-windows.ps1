@@ -56,6 +56,57 @@ function Get-DoctorPythonCandidates {
                 Sort-Object FullName -Descending | ForEach-Object { $_.FullName }
         }
     }
+    foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, ($env:SystemDrive + '\'))) {
+        if ($base) {
+            Get-ChildItem -Path (Join-Path $base 'Python*\python.exe') -File -ErrorAction SilentlyContinue |
+                Sort-Object FullName -Descending | ForEach-Object { $_.FullName }
+        }
+    }
+}
+
+function Get-WindowsSetupPath {
+    Join-Path $env:USERPROFILE '.local\share\usage-tools-for-codex\windows.json'
+}
+
+function Read-WindowsSetup {
+    $path = Get-WindowsSetupPath
+    if (-not (Test-Path -LiteralPath $path)) { return $null }
+    try {
+        $config = Get-Content -LiteralPath $path -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        if ($config.version -ne 1) { throw 'Unsupported version' }
+        foreach ($key in @('python_path', 'codex_path')) {
+            $value = $config.$key
+            if ($null -ne $value -and ($value -isnot [string] -or -not [IO.Path]::IsPathRooted($value) -or
+                $value -notmatch '^(?:[A-Za-z]:[\\/]|\\\\)' -or [IO.Path]::GetExtension($value) -ne '.exe')) {
+                throw ('Invalid ' + $key)
+            }
+        }
+        return $config
+    }
+    catch { throw "Cannot read Windows configuration at $path. Repair it or move it aside, then run configure.ps1. $($_.Exception.Message)" }
+}
+
+function Find-DoctorPython {
+    param([string]$RequestedPath)
+    $seen = @{}
+    $unsupported = $null
+    foreach ($candidate in @(Get-DoctorPythonCandidates $RequestedPath)) {
+        if (-not $candidate -or $seen.ContainsKey($candidate)) { continue }
+        $seen[$candidate] = $true
+        if ($candidate -match '\\Microsoft\\WindowsApps\\' -or
+            [IO.Path]::GetExtension($candidate) -ne '.exe' -or
+            -not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+        $item = Get-Item -LiteralPath $candidate
+        # Do not execute install managers: they can download a missing runtime.
+        if ($item.VersionInfo.ProductName -match '(?i)manage|python launcher') { continue }
+        $info = Invoke-DoctorPythonProbe $item.FullName
+        if ($info) {
+            $result = [pscustomobject]@{ Path = $item.FullName; Info = $info }
+            if ($RequestedPath -or $info.supported) { return $result }
+            if (-not $unsupported) { $unsupported = $result }
+        }
+    }
+    return $unsupported
 }
 
 function Invoke-DoctorPythonProbe {
@@ -138,24 +189,18 @@ function Invoke-WindowsDoctor {
     Write-DoctorStatus OK 'Windows / PowerShell' ('PowerShell ' + $PSVersionTable.PSVersion) -Plain:$NoColor
     $missing = 0
     $warnings = 0
-    $selected = $null
-    $info = $null
-    $seen = @{}
-    foreach ($candidate in @(Get-DoctorPythonCandidates $PythonPath)) {
-        if (-not $candidate -or $seen.ContainsKey($candidate)) { continue }
-        $seen[$candidate] = $true
-        # Never launch a Microsoft Store app-execution alias while looking for Python.
-        if ($candidate -match '\\Microsoft\\WindowsApps\\' -or
-            [IO.Path]::GetExtension($candidate) -ne '.exe' -or
-            -not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
-        $item = Get-Item -LiteralPath $candidate
-        # Install Manager and legacy launcher executables are not interpreters.
-        # Inspect metadata only: running a manager can install a missing runtime.
-        if ($item.VersionInfo.ProductName -match '(?i)manage|python launcher') { continue }
-        $resolved = $item.FullName
-        $info = Invoke-DoctorPythonProbe $resolved
-        if ($info) { $selected = $resolved; break }
+    try {
+        $config = Read-WindowsSetup
+        if ($config) {
+            Write-DoctorStatus INFO 'Saved Windows configuration' (Get-WindowsSetupPath) -Plain:$NoColor
+            if (-not $PythonPath) { $PythonPath = $config.python_path }
+            if (-not $CodexPath) { $CodexPath = $config.codex_path }
+        }
     }
+    catch { Write-DoctorStatus MISSING 'Windows configuration' $_.Exception.Message -Plain:$NoColor; return 1 }
+    $python = Find-DoctorPython $PythonPath
+    $selected = if ($python) { $python.Path } else { $null }
+    $info = if ($python) { $python.Info } else { $null }
     if (-not $selected) {
         Write-DoctorStatus MISSING 'Python 3.10+' 'No usable interpreter found. Install CPython, or pass -PythonPath with its python.exe.' -Plain:$NoColor
         Write-DoctorStatus INFO 'Python modules' 'SQLite, native modules, pip and curses cannot be checked until Python works.' -Plain:$NoColor
@@ -192,13 +237,18 @@ function Invoke-WindowsDoctor {
     $codex = Find-DoctorCodex $CodexPath
     if ($codex) {
         Write-DoctorStatus FOUND 'Native Codex executable (presence only)' $codex -Plain:$NoColor
-        Write-DoctorStatus INFO 'Quota / tracking integration' 'Not executed or authenticated. Supply this path with --codex-bin when configuring tracking.' -Plain:$NoColor
+        $detail = if ($config -and $config.codex_path -eq $codex) {
+            'Not executed or authenticated. Saved path is shared by quota and the estimator on Windows.'
+        } else { 'Not executed or authenticated. Run configure.ps1 to save this path for all Windows commands.' }
+        Write-DoctorStatus INFO 'Quota / tracking integration' $detail -Plain:$NoColor
     }
     else {
         Write-DoctorStatus WARN 'Native Codex executable' 'Needed for quota/tracking, not offline reports. Use -CodexPath to check a GUI-bundled codex.exe; a separate CLI install is not necessarily needed.' -Plain:$NoColor
         $warnings++
     }
     Write-Host ''
+    Write-Host '  Next: powershell.exe -File .\install.ps1'
+    Write-Host '  Resolve missing dependencies first; configure.ps1 can prepare the dedicated venv.'
     if ($missing) {
         Write-DoctorStatus MISSING 'Required dependencies need attention' ('Blocking checks: ' + $missing + '; other checks needing attention: ' + $warnings) -Plain:$NoColor
         return 1
