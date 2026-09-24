@@ -156,6 +156,25 @@ interpreter before running the verification batches.
 
 ### Local operation
 
+- Run `.\doctor-windows.ps1` from the checkout to check dependencies without
+  installing anything. It runs with PowerShell alone; when Python is found it
+  probes its modules. Use `-PythonPath` to choose the exact interpreter,
+  `-CodexPath` for a native executable presence check, and `-NoColor` for plain
+  output. Automatic Python lookup prefers an active venv, the dedicated
+  `.local/share/usage-tools-for-codex/venv`, PATH, then registered/known installs.
+  Store aliases and recognized Python manager/launcher executables are skipped
+  without execution; pass an actual interpreter rather than a manager alias.
+  Codex is never executed; the desktop bundled executable can be found without
+  a separate CLI installation. Exit codes: 0 dependencies found, 1 required
+  dependency unavailable, 2 optional/feature-specific setup needs attention.
+  If Windows PowerShell blocks local scripts, run
+  `powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\doctor-windows.ps1`;
+  this changes policy only for that process, subject to existing Group Policy.
+  The script is also included in the installed package directory.
+  Doctor follow-up verification: six focused tests on Windows PowerShell 5.1;
+  real interpreter/autodiscovery checks on PowerShell 7.6.5; full native offline
+  suite via the same `tests/run_audit.py` command: 93 tests, exit 0, ten existing
+  symlink skips. No real Codex invocation or installation was performed.
 - Run `python install.py` with the selected interpreter; normal installer
   options are unchanged. Install curses explicitly in that interpreter when
   interactive use is wanted. Neither installer nor application installs it.

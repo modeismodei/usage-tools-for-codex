@@ -69,6 +69,7 @@ class Installation(unittest.TestCase):
         self.assertFalse((self.dest/'codex_limit_tools/extra.py').exists())
         self.assertEqual((self.dest/'LICENSE').read_bytes(),(ROOT/'LICENSE').read_bytes())
         self.assertEqual((self.dest/'NOTICE').read_bytes(),(ROOT/'NOTICE').read_bytes())
+        self.assertEqual((self.dest/'doctor-windows.ps1').read_bytes(),(ROOT/'doctor-windows.ps1').read_bytes())
         for name in installer.COMMANDS:
             self.assertIn('usage:',self.command(name,'--help').stdout)
             self.assertIn('GPLv3',self.command(name,'--version').stdout)

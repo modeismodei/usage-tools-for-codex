@@ -10,7 +10,12 @@
   installation in an isolated venv, windows-curses 2.4.2 prebuilt wheel;
   PowerShell 7.6.5 / native ConPTY console.
 - Final command: `.runtime/windows-venv/Scripts/python.exe -B tests/run_audit.py`.
-- Candidate above: 87 tests, exit 0, no failures/errors, ten symlink skips
+- Original port candidate above: 87 tests, exit 0, ten symlink skips.
+- Follow-up: standalone doctor-windows.ps1, included in the install payload;
+  no Python dependency to start; optional Python probes, colored results,
+  no installs, manager launches, Codex execution or account access.
+- Doctor verified on PowerShell 5.1 and 7.6.5. Six focused tests passed;
+  full native suite for this update: 93 tests, exit 0, ten symlink skips
   (three methods and seven subcases); synthetic sentinels unchanged.
 - Focused A/B commands and counts, including corrected failures, are recorded
   in the Windows plan. Detailed logs remain ignored under .runtime.
@@ -18,7 +23,8 @@
   terminal restoration, collector survival after launcher exit, second-console
   shutdown and lock release verified with synthetic logs and fake RPC only.
 - Next concrete action: run `python3 -B tests/run_audit.py` on native Linux
-  at the exact implementation commit above. Linux regression gate is PENDING.
+  at the current candidate, including the doctor follow-up (identify with
+  `git rev-parse HEAD`). Linux regression gate is PENDING.
 - GUI-only live integration is UNVERIFIED; no account read was authorized.
   A desktop bundled native executable can be supplied with --codex-bin.
 - Symlink-specific checks need an account with symlink privilege; hard-link
