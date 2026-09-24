@@ -1,9 +1,23 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 Usage Tools for Codex contributors
 """Read-only Codex app-server RPC, adapted from the quota v2 monitor."""
-import hashlib,json,math,os,select,subprocess,time
+import hashlib,json,math,os,pathlib,queue,select,shutil,subprocess,threading,time
 class MonitorError(Exception):
     pass
+
+def resolve_executable(executable):
+    if os.name != 'nt':
+        return executable
+    # Own a native process directly; npm/PowerShell shims can orphan children.
+    value = os.fspath(executable)
+    native = shutil.which(value + '.exe') if pathlib.Path(value).suffix == '' else None
+    found = native or shutil.which(value)
+    if not found or pathlib.Path(found).suffix.lower() != '.exe':
+        raise MonitorError('Native Codex executable required; use --codex-bin with the full '
+                           'path to codex.exe (including a desktop-app bundled executable). '
+                           'Unresolved .cmd/.ps1 shims are not supported.')
+    return found
+
 
 class RPC:
 
@@ -11,9 +25,33 @@ class RPC:
         self.timeout = timeout
         self.seq = 0
         self.buf = b''
-        self.p = subprocess.Popen([executable, 'app-server'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+        options = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
+        self.p = subprocess.Popen([resolve_executable(executable), 'app-server'], stdin=subprocess.PIPE,
+                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0, **options)
+        self.reader = None
+        self.stopping = threading.Event()
+        if os.name == 'nt':
+            self.chunks = queue.Queue(maxsize=8)
+            self.reader = threading.Thread(target=self._read_pipe, name='quota-pipe-reader', daemon=True)
+            self.reader.start()
+
+    def _read_pipe(self):
+        while not self.stopping.is_set():
+            try:
+                chunk = os.read(self.p.stdout.fileno(), 65536)
+            except OSError:
+                chunk = b''
+            while not self.stopping.is_set():
+                try:
+                    self.chunks.put(chunk, timeout=.05)
+                    break
+                except queue.Full:
+                    continue
+            if not chunk:
+                return
 
     def close(self):
+        self.stopping.set()
         if self.p.poll() is None:
             self.p.terminate()
             try:
@@ -21,6 +59,10 @@ class RPC:
             except subprocess.TimeoutExpired:
                 self.p.kill()
                 self.p.wait()
+        if self.reader is not None:
+            self.reader.join(timeout=3)
+            if self.reader.is_alive():
+                raise MonitorError('Owned app-server pipe reader did not exit')
         self.p.stdin.close()
         self.p.stdout.close()
 
@@ -43,10 +85,16 @@ class RPC:
             if time.monotonic() >= deadline:
                 raise MonitorError('RPC timeout')
             if b'\n' not in self.buf:
-                ready, _, _ = select.select([self.p.stdout], [], [], max(0, deadline - time.monotonic()))
-                if not ready:
-                    raise MonitorError('RPC timeout')
-                chunk = os.read(self.p.stdout.fileno(), 65536)
+                if self.reader is not None:
+                    try:
+                        chunk = self.chunks.get(timeout=max(0, deadline - time.monotonic()))
+                    except queue.Empty:
+                        raise MonitorError('RPC timeout') from None
+                else:
+                    ready, _, _ = select.select([self.p.stdout], [], [], max(0, deadline - time.monotonic()))
+                    if not ready:
+                        raise MonitorError('RPC timeout')
+                    chunk = os.read(self.p.stdout.fileno(), 65536)
                 if not chunk:
                     raise MonitorError('app-server closed its output')
                 self.buf += chunk

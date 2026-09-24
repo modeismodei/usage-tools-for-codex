@@ -19,7 +19,7 @@ class Licensing(unittest.TestCase):
             root = pathlib.Path(directory)
             env = {**os.environ, 'XDG_STATE_HOME':str(root/'state'), 'XDG_CONFIG_HOME':str(root/'config')}
             commands = [[sys.executable,str(ROOT/name)] for name in ('codex-limit-estimator','codex-usage','codex-quota')]
-            commands.append(['bash',str(ROOT/'install.sh')])
+            commands.append([sys.executable,str(ROOT/'install.py')] if os.name == 'nt' else ['bash',str(ROOT/'install.sh')])
             for command in commands:
                 license_result = subprocess.run(command+['--license'],env=env,capture_output=True,text=True,timeout=5)
                 self.assertEqual(license_result.returncode,0,license_result.stderr)

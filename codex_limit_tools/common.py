@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 Usage Tools for Codex contributors
-import fcntl,hashlib,json,os,pathlib,sqlite3,stat,tempfile,time,uuid
+import hashlib,json,os,pathlib,sqlite3,stat,tempfile,time,uuid
 from contextlib import closing,contextmanager
+
+from .platform_io import WINDOWS, is_alias, private_mkdir, lock_file, unlock_file
 
 SCHEMA_VERSION = 2
 
@@ -12,13 +14,16 @@ def regular_private_path(path):
         info = path.lstat()
     except FileNotFoundError:
         return
-    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or is_alias(path):
         raise ValueError('State file must be regular and have one link: '+path.name)
 
 
 def private_open(path, mode='ab'):
     """Create owner-only files, refusing symlinks and hard links before writing."""
     regular_private_path(path)
+    if WINDOWS:
+        from .platform_io import windows_open
+        return windows_open(path, mode)
     flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW
     flags |= os.O_EXCL if mode in ('x', 'xb') else os.O_APPEND
     fd = os.open(path, flags, 0o600)
@@ -40,10 +45,17 @@ def validate_database_files(path):
 @contextmanager
 def atomic_text(path, *, replace=True, newline=None):
     """Publish a complete owner-only file without following destination links."""
-    fd, temporary = tempfile.mkstemp(prefix='.'+path.name+'.', dir=path.parent)
-    temporary = pathlib.Path(temporary)
+    if WINDOWS:
+        temporary = path.with_name('.'+path.name+'.'+uuid.uuid4().hex)
+        stream = private_open(temporary, 'x')
+    else:
+        fd, temporary = tempfile.mkstemp(prefix='.'+path.name+'.', dir=path.parent)
+        temporary = pathlib.Path(temporary)
+        stream = os.fdopen(fd, 'w', encoding='utf-8', newline=newline)
+    if WINDOWS:
+        stream.reconfigure(encoding='utf-8', newline=newline)
     try:
-        with os.fdopen(fd, 'w', encoding='utf-8', newline=newline) as stream:
+        with stream:
             yield stream
             stream.flush()
             os.fsync(stream.fileno())
@@ -70,14 +82,17 @@ CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,ts REAL,kind TEXT,detai
 @contextmanager
 def daemon_lock(path):
     """Use the same lock inode as both the original and current collector."""
-    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    private_mkdir(path)
     with private_open(path / 'daemon.lock') as lock:
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_file(lock)
         except BlockingIOError:
             raise ValueError('Collector is active. Run codex-limit-estimator shutdown '
                              'with the same --data-dir, wait for Daemon: offline, then retry.') from None
-        yield lock
+        try:
+            yield lock
+        finally:
+            unlock_file(lock)
 
 
 def _migration_v1(db):
@@ -130,7 +145,7 @@ def connect(path, *, readonly=False, lock_held=False, migrate=True):
     if readonly:
         db=sqlite3.connect((path/'tracking.sqlite3').resolve().as_uri()+'?mode=ro',uri=True,timeout=30)
     else:
-        path.mkdir(parents=True,exist_ok=True,mode=0o700)
+        private_mkdir(path)
         with private_open(path/'tracking.sqlite3'):pass
         db=sqlite3.connect(path/'tracking.sqlite3',timeout=30)
     db.row_factory=sqlite3.Row

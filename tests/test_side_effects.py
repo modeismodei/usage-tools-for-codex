@@ -17,6 +17,7 @@ from codex_limit_tools import cli, installer
 from codex_limit_tools.common import connect, daemon_lock, put
 from codex_limit_tools.quota import RPC, MonitorError
 from test_history import legacy_database
+from native_support import assert_private, symlink
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -49,15 +50,16 @@ class SideEffects(unittest.TestCase):
     def test_export_replaces_links_without_touching_their_targets(self):
         for suffix in ('.json', '.csv'):
             for kind in ('symlink', 'hardlink'):
-                dest = self.root/(kind+suffix)
-                if kind == 'symlink':
-                    dest.symlink_to(self.sentinel)
-                else:
-                    os.link(self.sentinel, dest)
-                cli.export_file(dest, {'daily':[]}, 'daily')
-                self.assertEqual(fingerprint(self.sentinel), self.before)
-                self.assertFalse(dest.is_symlink())
-                self.assertEqual(dest.stat().st_mode & 0o777, 0o600)
+                with self.subTest(fixture=kind):
+                    dest = self.root/(kind+suffix)
+                    if kind == 'symlink':
+                        symlink(self, dest, self.sentinel)
+                    else:
+                        os.link(self.sentinel, dest)
+                    cli.export_file(dest, {'daily':[]}, 'daily')
+                    self.assertEqual(fingerprint(self.sentinel), self.before)
+                    self.assertFalse(dest.is_symlink())
+                    assert_private(self, dest)
 
     def test_failed_export_preserves_existing_destination(self):
         dest = self.root/'export.json'
@@ -73,7 +75,7 @@ class SideEffects(unittest.TestCase):
     def test_prices_import_replaces_link_and_preserves_frozen_run(self):
         dest = self.root/'config/codex-limit-tools/prices.json'
         dest.parent.mkdir(parents=True)
-        dest.symlink_to(self.sentinel)
+        symlink(self, dest, self.sentinel)
         with closing(connect(self.state)) as db:
             put(db, 'config', {'prices':{'name':'synthetic frozen prices'}})
             db.commit()
@@ -113,24 +115,26 @@ class SideEffects(unittest.TestCase):
         database = self.outside/'database/tracking.sqlite3'
         original = fingerprint(database)
         for kind in ('symlink', 'hardlink'):
-            state = self.root/kind
-            state.mkdir()
-            alias = state/'tracking.sqlite3'
-            if kind == 'symlink':alias.symlink_to(database)
-            else:os.link(database, alias)
-            with self.assertRaises(ValueError):
-                with closing(connect(state)) as db:put(db, 'sentinel', 'changed'); db.commit()
-            alias.unlink()
-            self.assertEqual(fingerprint(database), original)
+            with self.subTest(fixture=kind):
+                state = self.root/kind
+                state.mkdir()
+                alias = state/'tracking.sqlite3'
+                if kind == 'symlink':symlink(self, alias, database)
+                else:os.link(database, alias)
+                with self.assertRaises(ValueError):
+                    with closing(connect(state)) as db:put(db, 'sentinel', 'changed'); db.commit()
+                alias.unlink()
+                self.assertEqual(fingerprint(database), original)
         for name in ('tracking.sqlite3-wal', 'tracking.sqlite3-shm', 'tracking.sqlite3-journal', 'daemon.lock'):
-            state = self.root/name
-            state.mkdir()
-            (state/name).symlink_to(self.sentinel)
-            with self.assertRaises((ValueError, OSError)):
-                if name == 'daemon.lock':
-                    with daemon_lock(state):pass
-                else:
-                    with closing(connect(state)):pass
+            with self.subTest(fixture=name):
+                state = self.root/name
+                state.mkdir()
+                symlink(self, state/name, self.sentinel)
+                with self.assertRaises((ValueError, OSError)):
+                    if name == 'daemon.lock':
+                        with daemon_lock(state):pass
+                    else:
+                        with closing(connect(state)):pass
 
     def test_new_private_state_backups_and_daemon_logs_are_owner_only(self):
         previous = os.umask(0o022)
@@ -145,11 +149,11 @@ class SideEffects(unittest.TestCase):
         backup = installer.backup_database(legacy, 'synthetic')
         files = [self.state/'tracking.sqlite3', self.state/'daemon.lock', self.state/'daemon.log',
                  backup, *legacy.glob('*.backup-v0-*')]
-        self.assertTrue(all(p.stat().st_mode & 0o777 == 0o600 for p in files))
+        for p in files:assert_private(self, p)
 
     def test_daemon_log_alias_does_not_spawn_process(self):
         self.state.mkdir()
-        (self.state/'daemon.log').symlink_to(self.sentinel)
+        symlink(self, self.state/'daemon.log', self.sentinel)
         with patch('codex_limit_tools.cli.subprocess.Popen') as process:
             with self.assertRaises((ValueError, OSError)):cli.start_process(self.state)
             process.assert_not_called()
@@ -158,7 +162,7 @@ class SideEffects(unittest.TestCase):
         for child in ('lib', 'bin'):
             prefix = self.root/child
             prefix.mkdir()
-            (prefix/child).symlink_to(self.outside, target_is_directory=True)
+            symlink(self, prefix/child, self.outside, target_is_directory=True)
             with self.assertRaisesRegex(ValueError, 'directory'):
                 installer.install(ROOT, prefix, [self.state], self.root/'config')
         self.assertEqual(list(self.outside.iterdir()), [self.sentinel])
@@ -174,7 +178,8 @@ class SideEffects(unittest.TestCase):
             result = subprocess.run([sys.executable, str(bundle/name), '--help'], env=env,
                                     capture_output=True, timeout=10)
             self.assertEqual(result.returncode, 0)
-        result = subprocess.run(['bash', str(bundle/'install.sh'), '--help'], env=env,
+        entry = [sys.executable, str(bundle/'install.py')] if os.name == 'nt' else ['bash', str(bundle/'install.sh')]
+        result = subprocess.run([*entry, '--help'], env=env,
                                 capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0)
         self.assertFalse(list(bundle.rglob('__pycache__')))

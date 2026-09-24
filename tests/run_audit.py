@@ -83,6 +83,8 @@ def main():
     parser.add_argument('--pattern', default='test*.py')
     parser.add_argument('--trace', action='store_true', help='Require strace; retain file/process/network traces locally')
     args = parser.parse_args()
+    if args.trace and not sys.platform.startswith('linux'):
+        parser.error('--trace is Linux-only')
     tracer = shutil.which('strace') if args.trace else None
     if args.trace and not tracer:
         parser.error('--trace requires strace')
@@ -98,6 +100,17 @@ def main():
                CODEX_HOME=str(work/'codex'), TMPDIR=str(work/'tmp'),
                PYTHONDONTWRITEBYTECODE='1', PYTHONPATH=os.pathsep.join((str(work/'guard'), str(ROOT))),
                LANG='C.UTF-8', TERM='xterm-256color', CODEX_AUDIT_ROOT=str(work))
+    if os.name == 'nt':
+        system = pathlib.Path(os.environ['SystemRoot'])
+        for name in ('appdata', 'localappdata'):
+            (work/name).mkdir(mode=0o700)
+        env.update(SystemRoot=str(system), WINDIR=str(system), SystemDrive=system.drive,
+                   COMSPEC=str(system/'System32/cmd.exe'), PATHEXT='.COM;.EXE;.BAT;.CMD',
+                   USERPROFILE=str(work/'home'), APPDATA=str(work/'appdata'),
+                   LOCALAPPDATA=str(work/'localappdata'), TEMP=str(work/'tmp'), TMP=str(work/'tmp'),
+                   PATH=os.pathsep.join((str(work/'guard'), str(pathlib.Path(sys.executable).parent), str(system/'System32'))),
+                   PYTHONUTF8='1', PYTHONIOENCODING='utf-8')
+        (work/'guard/codex.cmd').write_text('@echo off\nexit /b 99\n', encoding='ascii')
     (work/'guard/codex').write_text('#!'+sys.executable+'\nraise SystemExit("Real Codex is disabled in audit tests")\n')
     (work/'guard/codex').chmod(0o700)
     (work/'guard/sitecustomize.py').write_text('''import pathlib, sys
@@ -119,17 +132,18 @@ sys.addaudithook(deny_network)
     if tracer:
         command = [tracer, '-f', '-qq', '-s', '256', '-yy', '-e', 'trace=%file,%process,%network',
                    '-o', str(work/'syscalls.log'), *command]
-    with (work/'tests.log').open('w') as log:
+    with (work/'tests.log').open('w', encoding='utf-8') as log:
         result = subprocess.run(command, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
-    lines = (work/'tests.log').read_text().splitlines()
-    summary = [line for line in lines if re.match(r'^Ran \d+ tests? in ', line) or line == 'OK' or line.startswith('FAILED (')]
+    lines = (work/'tests.log').read_text(encoding='utf-8').splitlines()
+    summary = [line for line in lines if re.match(r'^Ran \d+ tests? in ', line) or line.startswith('OK') or line.startswith('FAILED (')]
     count = next((int(line.split()[1]) for line in summary if line.startswith('Ran ')), 0)
     unchanged = snapshots() == before
     denied = (work/'guard/network-denied.log').exists()
     trace = trace_summary(work/'syscalls.log', work) if tracer else {}
     ok = (result.returncode == 0 and count > 0 and unchanged and not denied
           and not any(trace.get(k) for k in ('outside_write_attempts', 'unresolved_trace_calls', 'internet_syscalls')))
-    aggregate = dict(tests=count, exit_code=result.returncode, sentinels_unchanged=unchanged,
+    skipped = next((int(m[1]) for line in summary if (m := re.search(r'skipped=(\d+)', line))), 0)
+    aggregate = dict(tests=count, skipped=skipped, exit_code=result.returncode, sentinels_unchanged=unchanged,
                      network_denials=int(denied), traced=bool(tracer), passed=ok, **trace)
     (work/'summary.json').write_text(json.dumps(aggregate, indent=2)+'\n')
     print('\n'.join(summary))

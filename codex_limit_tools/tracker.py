@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 Usage Tools for Codex contributors
-import fcntl,json,math,os,pathlib,signal,time,uuid
+import json,math,os,pathlib,signal,time,uuid
 from .common import connect,get,put,event,stamp,fingerprint,daemon_lock,ensure_run,regular_private_path
+from .platform_io import WINDOWS, lock_file, unlock_file
+from .common import private_open
 from .usage import index,aggregate
 from .quota import QuotaSource
 
@@ -195,6 +197,14 @@ def _daemon_loop(path,db):
 def running(path):
     regular_private_path(path/'daemon.lock')
     if not (path/'daemon.lock').exists():return False
-    with open(path/'daemon.lock','r') as f:
-        try:fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB);return False
-        except BlockingIOError:return True
+    try:
+        stream = private_open(path/'daemon.lock', 'rb') if WINDOWS else open(path/'daemon.lock', 'r')
+    except FileNotFoundError:
+        return False
+    with stream:
+        try:
+            lock_file(stream)
+        except BlockingIOError:
+            return True
+        unlock_file(stream)
+        return False

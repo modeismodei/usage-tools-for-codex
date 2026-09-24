@@ -24,7 +24,7 @@ class Installation(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = pathlib.Path(self.temp.name)
-        self.source = self.root/'bundle'
+        self.source = self.root/'bundle spazi è'
         self.source.mkdir()
         for name in (*installer.PAYLOAD, *(n for n in installer.OPTIONAL_PAYLOAD if (ROOT/n).is_file())):
             target = self.source/name
@@ -33,7 +33,7 @@ class Installation(unittest.TestCase):
         (self.source/'development-only.txt').write_text('synthetic development file')
         (self.source/'.env').write_text('SYNTHETIC_TEST_ONLY=true')
         (self.source/'codex_limit_tools/extra.py').write_text('synthetic_extra = True')
-        self.prefix = self.root/'prefix'
+        self.prefix = self.root/'prefix spazi è'
         self.state = self.root/'state'
         self.config = self.root/'config/codex-limit-tools'
         self.env = {**os.environ, 'XDG_CONFIG_HOME':str(self.root/'config'),
@@ -41,27 +41,28 @@ class Installation(unittest.TestCase):
         self.dest = self.prefix/'lib/codex-limit-tools'
 
     def script(self, *args, state=None, ok=True):
-        result = subprocess.run(['bash',str(self.source/'install.sh'),'--prefix',str(self.prefix),
+        entry = [sys.executable,str(self.source/'install.py')] if os.name == 'nt' else ['bash',str(self.source/'install.sh')]
+        result = subprocess.run([*entry,'--prefix',str(self.prefix),
                                  '--data-dir',str(state or self.state),*args],env=self.env,
                                 text=True,capture_output=True,timeout=20)
         self.assertEqual(result.returncode == 0,ok,result.stdout+result.stderr)
         return result
 
     def command(self, name, *args):
-        result = subprocess.run([str(self.prefix/'bin'/name),*args],env=self.env,
+        result = subprocess.run([str(self.prefix/'bin'/(name+'.cmd' if os.name == 'nt' else name)),*args],env=self.env,
                                 text=True,capture_output=True,timeout=10)
         self.assertEqual(result.returncode,0,result.stderr)
         return result
 
     def test_fresh_payload_old_commands_and_standalone_entry_points(self):
         (self.prefix/'bin').mkdir(parents=True)
-        previous = self.prefix/'bin/codex-usage'
+        previous = self.prefix/'bin'/installer.COMMAND_FILES[1]
         previous.write_text('synthetic previous standalone command')
         watcher = self.prefix/'bin/watch-codex-quota'
         watcher.write_text('synthetic independent watcher')
         self.script()
         self.assertEqual(watcher.read_text(),'synthetic independent watcher')
-        self.assertEqual(next((self.prefix/'bin').glob('codex-usage.backup-*')).read_text(),
+        self.assertEqual(next((self.prefix/'bin').glob(installer.COMMAND_FILES[1]+'.backup-*')).read_text(),
                          'synthetic previous standalone command')
         self.assertFalse((self.dest/'.env').exists())
         self.assertFalse((self.dest/'development-only.txt').exists())
@@ -70,6 +71,7 @@ class Installation(unittest.TestCase):
         self.assertEqual((self.dest/'NOTICE').read_bytes(),(ROOT/'NOTICE').read_bytes())
         for name in installer.COMMANDS:
             self.assertIn('usage:',self.command(name,'--help').stdout)
+            self.assertIn('GPLv3',self.command(name,'--version').stdout)
             self.assertEqual(self.command(name,'--license').stdout,(ROOT/'LICENSE').read_text())
         usage = json.loads(self.command('codex-usage','--codex-home',str(self.root/'empty-codex'),
                                         '--data-dir',str(self.root/'usage-state'),'--json').stdout)
@@ -118,12 +120,13 @@ class Installation(unittest.TestCase):
     def test_switch_failure_restores_previous_package_and_commands(self):
         self.script()
         (self.dest/'preserved.txt').write_text('original')
-        targets = {n:os.readlink(self.prefix/'bin'/n) for n in installer.COMMANDS}
+        read_command = lambda n: (self.prefix/'bin'/n).read_bytes() if os.name == 'nt' else os.readlink(self.prefix/'bin'/n)
+        targets = {n:read_command(n) for n in installer.COMMAND_FILES}
         replace = os.replace
         failed_once = False
         def fail(source,dest):
             nonlocal failed_once
-            if pathlib.Path(dest).name == 'codex-usage' and not failed_once:
+            if pathlib.Path(dest).name == installer.COMMAND_FILES[1] and not failed_once:
                 failed_once = True
                 raise OSError('synthetic switch failure')
             return replace(source,dest)
@@ -131,7 +134,7 @@ class Installation(unittest.TestCase):
             with self.assertRaisesRegex(OSError,'synthetic switch failure'):
                 installer.install(self.source,self.prefix,[self.state],self.config,True)
         self.assertEqual((self.dest/'preserved.txt').read_text(),'original')
-        self.assertEqual({n:os.readlink(self.prefix/'bin'/n) for n in installer.COMMANDS},targets)
+        self.assertEqual({n:read_command(n) for n in installer.COMMAND_FILES},targets)
         self.assertTrue(list(self.dest.parent.glob('codex-limit-tools.failed-*')))
 
     def test_all_requested_state_directories_are_locked(self):
@@ -141,3 +144,22 @@ class Installation(unittest.TestCase):
             result = self.script('--upgrade','--data-dir',str(other),ok=False)
             self.assertIn('Collector is active',result.stderr)
         self.assertFalse(list(self.dest.parent.glob('codex-limit-tools.backup-*')))
+
+    def test_upgrade_backs_up_multiple_states_and_launcher_exit_code(self):
+        self.script()
+        other = self.root/'second state'
+        for path in (self.state, other):
+            # Install only creates a lock directory; populate synthetic legacy state.
+            with closing(sqlite3.connect(path/'tracking.sqlite3')) if path.exists() else closing(legacy_database(path)) as db:
+                db.execute('CREATE TABLE IF NOT EXISTS sentinel(value TEXT)')
+                db.execute("INSERT INTO sentinel VALUES ('synthetic')")
+                db.commit()
+        self.script('--upgrade','--data-dir',str(other))
+        for path in (self.state,other):
+            backups=list(path.glob('*.backup-upgrade-*'))
+            self.assertEqual(len(backups),1)
+            with closing(sqlite3.connect(backups[0])) as db:
+                self.assertEqual(db.execute('SELECT value FROM sentinel').fetchone()[0],'synthetic')
+        launcher=self.prefix/'bin'/installer.COMMAND_FILES[0]
+        result=subprocess.run([str(launcher),'invalid-command'],env=self.env,capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,2)

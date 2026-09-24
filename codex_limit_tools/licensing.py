@@ -12,7 +12,7 @@ SHORT_NOTICE = 'GNU GPLv3; no warranty. Free software: redistribution is permitt
 
 
 def license_text():
-    return (pathlib.Path(__file__).resolve().parent.parent/'LICENSE').read_text()
+    return (pathlib.Path(__file__).resolve().parent.parent/'LICENSE').read_text(encoding='utf-8')
 
 
 class LicenseAction(argparse.Action):

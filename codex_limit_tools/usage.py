@@ -19,7 +19,7 @@ def canonical(name,prices):
     return name
 
 def load_prices(path):
-    prices=json.loads(pathlib.Path(path).read_text())
+    prices=json.loads(pathlib.Path(path).read_text(encoding='utf-8'))
     if not isinstance(prices,dict) or prices.get('schema')!=1 or not isinstance(prices.get('models'),dict) or not prices['models']:
         raise ValueError('Expected price schema 1 with nonempty models')
     if not isinstance(prices.get('name'),str):raise ValueError('Price snapshot needs a name')

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 Usage Tools for Codex contributors
-import curses,json,time
+import json,os,time
 from .common import connect,get,put,stamp,read_snapshot
 from .estimate import report_history,load_history,analyze_history
 from .usage import compact
@@ -61,7 +61,20 @@ def lines_for(status,current,daily,config,width=100,history=False,view='segment'
              ('Bounds omit reporting lag, other devices, missing logs and workload variation.','muted')]
     return rows
 
+def require_curses():
+    try:
+        import curses
+        return curses
+    except ImportError as exc:
+        if os.name == 'nt':
+            raise ValueError('Interactive UI requires a prebuilt windows-curses wheel for this Python; '
+                             'install it explicitly with python -m pip install --only-binary=:all: windows-curses, '
+                             'or use --background/headless commands.') from exc
+        raise ValueError('Interactive UI requires a curses-enabled Python interpreter') from exc
+
+
 def show(path):
+    curses=require_curses()
     db=connect(path,migrate=False)
     def screen(win):
         try:curses.curs_set(0)

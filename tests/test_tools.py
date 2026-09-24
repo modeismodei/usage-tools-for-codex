@@ -13,9 +13,18 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 
 class Tests(unittest.TestCase):
  def setUp(self):
+  self.previous_cwd=os.getcwd()
   self.tmp=tempfile.TemporaryDirectory();self.root=pathlib.Path(self.tmp.name);self.home=self.root/'codex';(self.home/'sessions').mkdir(parents=True)
   self.db=connect(self.root/'state');self.prices=load_prices(ROOT/'prices.json')
- def tearDown(self):self.db.close();self.tmp.cleanup()
+ def tearDown(self):
+  self.db.close();os.chdir(self.previous_cwd)
+  # The Windows venv launcher can outlive the lock-owning interpreter briefly.
+  deadline=time.monotonic()+3
+  while True:
+   try:self.tmp.cleanup();break
+   except PermissionError:
+    if os.name!='nt' or time.monotonic()>=deadline:raise
+    time.sleep(.05)
  def log(self,name='a',thread='owner',model='gpt-6-sol',rid='r1',owner=None,ts=None,inp=100000,cached=50000,out=1000):
   entries=[{'type':'session_meta','payload':{'id':thread}}, {'type':'turn_context','payload':{'turn_id':'turn','model':model}},
            {'type':'token_usage_record','timestamp':ts or time.time(),'payload':{'response_id':rid,'thread_id':owner or thread,'turn_id':'turn','usage':{'input_tokens':inp,'cached_input_tokens':cached,'output_tokens':out,'reasoning_output_tokens':100}}}]
@@ -36,6 +45,24 @@ class Tests(unittest.TestCase):
   index(self.db,self.home);self.assertEqual(aggregate(self.db,self.prices)['responses'],1)
   with p.open('a') as f:f.write('\n')
   index(self.db,self.home);self.assertEqual(aggregate(self.db,self.prices)['responses'],2)
+ def test_unicode_home_crlf_and_partial_append(self):
+  self.home=self.root/'codex spazi è'
+  (self.home/'sessions').mkdir(parents=True)
+  p=self.log()
+  p.write_bytes(p.read_text(encoding='utf-8').replace('\n','\r\n').encode('utf-8'))
+  stats=index(self.db,self.home)
+  self.assertEqual(stats['invalid'],0)
+  self.assertEqual(aggregate(self.db,self.prices)['responses'],1)
+  if os.name=='nt':
+   # Existing paths resolve to their native spelling; do not alter stored identity speculatively.
+   self.assertEqual(index(self.db,str(self.home).upper())['changed_files'],0)
+  event={'type':'token_usage_record','timestamp':time.time(),'payload':{'thread_id':'owner','turn_id':'turn','response_id':'r2','usage':{'input_tokens':10}}}
+  with p.open('ab') as stream:stream.write(json.dumps(event).encode('utf-8')+b'\r')
+  index(self.db,self.home)
+  self.assertEqual(aggregate(self.db,self.prices)['responses'],1)
+  with p.open('ab') as stream:stream.write(b'\n')
+  index(self.db,self.home)
+  self.assertEqual(aggregate(self.db,self.prices)['responses'],2)
  def test_unpriced_retained(self):
   self.log(model='internal-agent');index(self.db,self.home);m=aggregate(self.db,self.prices)
   self.assertEqual(m['unpriced_tokens'],101000);self.assertEqual(m['cost'],0)
@@ -97,9 +124,10 @@ class Tests(unittest.TestCase):
   rows=lines_for({'phase':'tracking','left':56},None,[],{'interval':300},100)
   self.assertTrue(any('56%' in text for text,_ in rows))
  def test_fake_rpc_allowlist(self):
-  fake=self.root/'fake-codex';audit=self.root/'audit';fake.write_text('''#!/usr/bin/env python3
+  if os.name == 'nt':os.chdir(self.root)
+  fake=self.root/('app-server' if os.name == 'nt' else 'fake-codex');audit=self.root/'audit';fake.write_text('''#!/usr/bin/env python3
 import json,sys,os
-assert sys.argv[1:]==['app-server']
+assert sys.argv[1:]==([] if os.name == 'nt' else ['app-server'])
 for line in sys.stdin:
  m=json.loads(line)
  with open(__file__+'.audit','a') as f:f.write(m['method']+'\\n')
@@ -112,11 +140,12 @@ for line in sys.stdin:
  else:result={}
  print(json.dumps({'id':m['id'],'result':result}),flush=True)
 ''');fake.chmod(0o755)
-  source=QuotaSource(str(fake))
+  executable=sys.executable if os.name == 'nt' else str(fake)
+  source=QuotaSource(executable)
   try:self.assertEqual(source.read()['left'],56)
   finally:source.close()
   self.assertEqual(pathlib.Path(str(fake)+'.audit').read_text().splitlines(),['initialize','initialized','account/read','account/rateLimits/read'])
-  quota=subprocess.run([sys.executable,str(ROOT/'codex-quota'),'--codex-bin',str(fake),'--json'],
+  quota=subprocess.run([sys.executable,str(ROOT/'codex-quota'),'--codex-bin',executable,'--json'],
                        capture_output=True,text=True,timeout=5)
   self.assertEqual(quota.returncode,0,quota.stderr)
   self.assertEqual(json.loads(quota.stdout)['left'],56)
@@ -126,7 +155,7 @@ for line in sys.stdin:
   before=[(p.read_bytes(),p.stat().st_mode,p.stat().st_mtime_ns) for p in protected]
   state=self.root/'live-state'
   cmd=[sys.executable,str(ROOT/'codex-limit-estimator')]
-  result=subprocess.run(cmd+['start','tracking','--background','--data-dir',str(state),'--codex-home',str(self.home),'--codex-bin',str(fake)],capture_output=True,text=True)
+  result=subprocess.run(cmd+['start','tracking','--background','--data-dir',str(state),'--codex-home',str(self.home),'--codex-bin',executable],capture_output=True,text=True)
   self.assertEqual(result.returncode,0,result.stderr)
   live=connect(state)
   def wait_phase(phase):
@@ -146,32 +175,42 @@ for line in sys.stdin:
    self.assertEqual(acknowledgement['snapshot_id'],get(live,'status')['snapshot_id'])
    inspected=subprocess.run(cmd+['checkpoint','--request-id',acknowledgement['id'],'--json','--data-dir',str(state)],capture_output=True,text=True,check=True)
    self.assertEqual(json.loads(inspected.stdout),acknowledgement)
-   # Exercise curses with a real pseudoterminal. q must leave collection running.
-   import pty,fcntl,termios,struct
-   master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',40,110,0,0))
-   env=os.environ.copy();env['TERM']='xterm-256color'
-   ui=subprocess.Popen(cmd+['--data-dir',str(state)],stdin=slave,stdout=slave,stderr=slave,env=env)
-   os.close(slave)
-   try:
-    audit_before=pathlib.Path(str(fake)+'.audit').read_text()
-    time.sleep(.15);os.write(master,b'vvh[]v');time.sleep(.15)
-    self.assertEqual(pathlib.Path(str(fake)+'.audit').read_text(),audit_before)
-    run_before=get(live,'config')['run_id']
-    os.write(master,b's');wait_phase('paused')
-    os.write(master,b'r');wait_phase('tracking')
-    self.assertEqual(get(live,'config')['run_id'],run_before)
-    fcntl.ioctl(master,termios.TIOCSWINSZ,struct.pack('HHHH',8,30,0,0))
-    os.write(master,b'vq');ui.wait(timeout=5)
-    self.assertEqual(ui.returncode,0);self.assertTrue(running(state))
-   finally:
-    if ui.poll() is None:ui.kill();ui.wait()
-    os.close(master)
+   if os.name != 'nt':
+    # Exercise curses with a real pseudoterminal. q must leave collection running.
+    import pty,fcntl,termios,struct
+    master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',40,110,0,0))
+    env=os.environ.copy();env['TERM']='xterm-256color'
+    ui=subprocess.Popen(cmd+['--data-dir',str(state)],stdin=slave,stdout=slave,stderr=slave,env=env)
+    os.close(slave)
+    try:
+     audit_before=pathlib.Path(str(fake)+'.audit').read_text()
+     time.sleep(.15);os.write(master,b'vvh[]v');time.sleep(.15)
+     self.assertEqual(pathlib.Path(str(fake)+'.audit').read_text(),audit_before)
+     run_before=get(live,'config')['run_id']
+     os.write(master,b's');wait_phase('paused')
+     os.write(master,b'r');wait_phase('tracking')
+     self.assertEqual(get(live,'config')['run_id'],run_before)
+     fcntl.ioctl(master,termios.TIOCSWINSZ,struct.pack('HHHH',8,30,0,0))
+     os.write(master,b'vq');ui.wait(timeout=5)
+     self.assertEqual(ui.returncode,0);self.assertTrue(running(state))
+    finally:
+     if ui.poll() is None:ui.kill();ui.wait()
+     os.close(master)
+   run_before=get(live,'config')['run_id']
+   daemon_before=get(live,'daemon')['instance_id']
+   duplicate=subprocess.run(cmd+['start','tracking','--background','--data-dir',str(state)],capture_output=True,text=True)
+   self.assertEqual(duplicate.returncode,0,duplicate.stderr)
+   self.assertEqual(get(live,'daemon')['instance_id'],daemon_before)
    subprocess.run(cmd+['stop','--data-dir',str(state)],capture_output=True,check=True);wait_phase('paused')
+   paused_count=live.execute('SELECT count(*) FROM snapshots').fetchone()[0]
+   time.sleep(.3)
+   self.assertEqual(live.execute('SELECT count(*) FROM snapshots').fetchone()[0],paused_count)
    rejected=subprocess.run(cmd+['checkpoint','--wait','--data-dir',str(state)],capture_output=True,text=True)
    self.assertNotEqual(rejected.returncode,0)
    self.assertIn('paused',rejected.stderr)
    self.assertTrue(get(live,'control')['paused'])
    subprocess.run(cmd+['resume','--data-dir',str(state)],capture_output=True,check=True);wait_phase('tracking')
+   self.assertEqual(get(live,'config')['run_id'],run_before)
    pathlib.Path(str(fake)+'.fail').write_text('synthetic failure')
    failed=subprocess.run(cmd+['checkpoint','--wait','--timeout','3','--data-dir',str(state)],capture_output=True,text=True,timeout=5)
    self.assertNotEqual(failed.returncode,0)

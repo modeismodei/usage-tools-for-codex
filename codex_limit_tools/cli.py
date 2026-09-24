@@ -18,9 +18,11 @@ def config_prices(path):
     return pathlib.Path(path).expanduser().resolve() if path else config if config.exists() else PACKAGE/'prices.json'
 
 def start_process(path):
+    options = ({'creationflags': subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
+               if os.name == 'nt' else {'start_new_session': True})
     with private_open(path/'daemon.log') as log:
         subprocess.Popen([sys.executable,str(PACKAGE/'codex-limit-estimator'),'_daemon','--data-dir',str(path)],
-            stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+            stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,**options)
 
 def control(db,path,action):
     if action=='resume' and not get(db,'config'):raise ValueError('Run start tracking first')
@@ -168,6 +170,11 @@ def estimator(argv=None):
                        snapshot_from=a.snapshot_from, snapshot_to=a.snapshot_to)
     except ValueError as exc:
         p.error(str(exc))
+    interactive = (sys.stdin.isatty() and sys.stdout.isatty()
+                   and (a.action == 'ui' or a.action == 'start' and not a.background))
+    if interactive:
+        from .tui import require_curses
+        require_curses()
     if not a.json and a.action != '_daemon':startup_notice()
     if a.action == 'prices':
         if a.target in (None, 'path'):
@@ -187,7 +194,7 @@ def estimator(argv=None):
         daemon(path);return
     read_only = (a.action in ('runs','segments','analyze','status','report','export')
                  or a.action == 'checkpoint' and bool(a.request_id)
-                 or a.action == 'ui' and not sys.stdin.isatty())
+                 or a.action == 'ui' and not interactive)
     if (read_only or a.action in ('ui','stop','resume','shutdown','checkpoint')) and not (path/'tracking.sqlite3').exists():
         raise ValueError('No tracking history; start tracking or choose an existing --data-dir')
     pending_prices = None
@@ -219,7 +226,7 @@ def estimator(argv=None):
                 put(db, 'status', {'phase':'starting'})
                 db.commit();start_process(path)
                 print(f"Tracking started. Run: {c['run_id']} | State: {path}")
-            if not a.background and sys.stdin.isatty() and sys.stdout.isatty():
+            if interactive:
                 from .tui import show
                 show(path)
         elif a.action == 'migrate':

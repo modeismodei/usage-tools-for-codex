@@ -3,7 +3,6 @@
 """Local installation and reversible upgrades; never start a collector."""
 import argparse
 from contextlib import ExitStack, closing
-import fcntl
 import os
 import pathlib
 import shutil
@@ -14,11 +13,13 @@ import time
 import uuid
 
 from .common import SCHEMA_VERSION, daemon_lock, data_path, private_open, atomic_text, validate_database_files
+from .platform_io import WINDOWS, lock_file, is_alias
 from .licensing import add_license_options,startup_notice
 
 COMMANDS = ('codex-limit-estimator', 'codex-usage', 'codex-quota')
-MODULES = ('__init__', 'cli', 'common', 'estimate', 'installer', 'licensing', 'quota', 'render', 'tracker', 'tui', 'usage')
-PAYLOAD = (*COMMANDS, 'install.sh', 'prices.json', 'README.md', 'LICENSE', 'NOTICE',
+MODULES = ('__init__', 'cli', 'common', 'estimate', 'installer', 'licensing', 'platform_io', 'quota', 'render', 'tracker', 'tui', 'usage')
+COMMAND_FILES = tuple(n+'.cmd' if WINDOWS else n for n in COMMANDS)
+PAYLOAD = (*COMMANDS, 'install.py', 'install.sh', 'prices.json', 'README.md', 'LICENSE', 'NOTICE',
            *(f'codex_limit_tools/{name}.py' for name in MODULES))
 OPTIONAL_PAYLOAD = ('TUI-preview.png', 'docs/ANALYSIS.md', 'docs/UPGRADING.md', 'docs/COMMANDS.md')
 
@@ -69,9 +70,9 @@ def install(source, prefix, state_dirs, config_dir, upgrade=False):
     state_dirs = sorted({data_path(p) for p in state_dirs})
     dest, bin_dir = prefix/'lib/codex-limit-tools', prefix/'bin'
     for directory in (dest.parent, bin_dir):
-        if directory.is_symlink() or directory.exists() and not directory.is_dir():
+        if is_alias(directory) or directory.exists() and not directory.is_dir():
             raise ValueError('Installation subdirectory must be a regular directory: '+directory.name)
-    if dest.is_symlink() or dest.exists() and not dest.is_dir():
+    if is_alias(dest) or dest.exists() and not dest.is_dir():
         raise ValueError('Installation path must be a regular directory')
     if dest.exists() and not upgrade:
         raise ValueError('Installation already exists. Shutdown its daemon, then use --upgrade (or --update).')
@@ -89,17 +90,17 @@ def install(source, prefix, state_dirs, config_dir, upgrade=False):
     with ExitStack() as stack:
         lock = stack.enter_context(private_open(dest.parent/'.codex-limit-tools.install.lock'))
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_file(lock)
         except BlockingIOError:
             raise ValueError('Another installation is in progress') from None
         # Recheck after the installation lock in case another process just finished.
-        if dest.is_symlink() or dest.exists() and not dest.is_dir():
+        if is_alias(dest) or dest.exists() and not dest.is_dir():
             raise ValueError('Installation path must be a regular directory')
         if dest.exists() and not upgrade:
             raise ValueError('Installation already exists; use --upgrade after shutdown')
         for path in state_dirs:
             stack.enter_context(daemon_lock(path))
-        for name in COMMANDS:
+        for name in COMMAND_FILES:
             if (bin_dir/name).is_dir() and not (bin_dir/name).is_symlink():
                 raise ValueError('Command path is a directory: '+name)
         stage.mkdir(mode=0o755)
@@ -107,7 +108,7 @@ def install(source, prefix, state_dirs, config_dir, upgrade=False):
         validate_payload(stage)
         backups = [p for path in state_dirs if (p := backup_database(path, suffix))]
         command_backups = {}
-        for name in COMMANDS:
+        for name in COMMAND_FILES:
             link = bin_dir/name
             if link.exists() or link.is_symlink():
                 backup = bin_dir/(name+'.backup-'+suffix)
@@ -125,15 +126,27 @@ def install(source, prefix, state_dirs, config_dir, upgrade=False):
                 moved_previous = True
             stage.rename(dest)
             installed = True
-            for name in COMMANDS:
+            for name in COMMAND_FILES:
                 temporary = bin_dir/(name+'.stage-'+suffix)
-                temporary.symlink_to(dest/name)
+                if WINDOWS:
+                    # The package path expands from the launcher at execution time, including Unicode.
+                    python = str(pathlib.Path(sys.executable).resolve())
+                    if not python.isascii():
+                        from .platform_io import short_executable_path
+                        python = short_executable_path(python)
+                    python = python.replace('%', '%%')
+                    command = name[:-4]
+                    temporary.write_text('@echo off\nsetlocal DisableDelayedExpansion\n'
+                                         f'"{python}" "%~dp0..\\lib\\codex-limit-tools\\{command}" %*\n'
+                                         'exit /b %errorlevel%\n', encoding='ascii')
+                else:
+                    temporary.symlink_to(dest/name)
                 os.replace(temporary, bin_dir/name)
                 switched.append(name)
             config_dir.mkdir(parents=True, exist_ok=True)
             try:
                 with atomic_text(config_dir/'prices.json', replace=False) as stream:
-                    stream.write((dest/'prices.json').read_text())
+                    stream.write((dest/'prices.json').read_text(encoding='utf-8'))
             except FileExistsError:
                 pass
         except BaseException:
