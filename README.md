@@ -5,11 +5,13 @@ live dashboard, saved history, and CSV/JSON exports. The estimator compares usag
 with quota consumption to estimate the token volume and API-equivalent cost per
 100% of weekly quota.
 
-**In development. Linux is the currently supported platform.**
+**In development. Linux and Windows are currently supported platforms.**
 
 An independent community project, not affiliated with or endorsed by OpenAI.
 
-![Codex Limit Estimator showing token usage, model mix, and a quota-based estimate](codex-limit-estimator.png)
+![Codex Limit Estimator on Linux showing token usage, model mix, and a quota-based estimate](codex-limit-estimator-screen-sh.png)
+
+![Codex Limit Estimator on Windows showing token usage, model mix, and a quota-based estimate](codex-limit-estimator-screen-ps.png)
 
 ## Installation
 
