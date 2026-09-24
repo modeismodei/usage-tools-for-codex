@@ -13,6 +13,8 @@ An independent community project, not affiliated with or endorsed by OpenAI.
 
 ## Installation
 
+### Linux/macOS
+
 Requires **Python 3.10+** (including SQLite and curses), **Bash**, and an installed,
 authenticated **Codex CLI** on your `PATH`. No additional Python packages or API
 key are needed.
@@ -33,13 +35,37 @@ codex-quota
 
 The first usage scan may take a while if you have a large session history.
 
+### Windows
+
+Requires **Python 3.10+** and an installed, authenticated **Codex desktop app or
+CLI**. From PowerShell:
+
+```powershell
+git clone https://github.com/modeismodei/usage-tools-for-codex.git
+cd usage-tools-for-codex
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\configure.ps1
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\doctor-windows.ps1
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\install.ps1
+```
+
+See the [installation guide](docs/INSTALL.md) for details and troubleshooting.
+
 ## Usage
 
 Start tracking and open the terminal interface:
 
 ```bash
+# Linux/macOS
 codex-limit-estimator start tracking
 ```
+
+```powershell
+# Windows
+codex-limit-estimator.cmd start tracking
+```
+
+On Windows, append `.cmd` to the command names in the examples below; the same
+applies to `codex-usage` and `codex-quota`.
 
 The tracker runs in the background and samples every five minutes by default.
 Estimates become available after new usage and quota consumption are observed.
@@ -68,10 +94,16 @@ codex-limit-estimator status
 ```
 
 Wait until status shows `Daemon: offline`. Update your checkout or download a
-fresh source archive, then run from its root directory:
+fresh source archive, then run from its root directory. On Linux/macOS:
 
 ```bash
 bash install.sh --upgrade
+```
+
+On Windows, rerun the PowerShell installer and accept the upgrade prompt:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\install.ps1
 ```
 
 Open a new terminal, then migrate and inspect your saved history:
@@ -99,7 +131,8 @@ pricing, data storage, and interpretation.
 
 ## Documentation
 
-- [User guide](docs/USAGE.md): tracking, prices, and interpreting results.
+- [Installation guide](docs/INSTALL.md): setup, updates, and troubleshooting.
+- [User guide](docs/USAGE.md): running the tools on Windows and Linux/UNIX-like systems.
 - [Command reference](docs/COMMANDS.md): controls, history, analysis, and exports.
 - [Analysis and exports](docs/ANALYSIS.md): calculations, selection rules, and data formats.
 - [Data and side effects](docs/SIDE-EFFECTS.md): files, processes, network access, and privacy.
